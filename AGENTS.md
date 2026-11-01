@@ -28,3 +28,5 @@ PORT: assente usa 7090 anche in scripts/start; valori invalidi vanno fermati pri
 
 La politica GATHER deve essere visibile per default prima del MOVE. Nel parser rsync, --no-OPTION è uno switch; se un token è il valore di un'altra opzione, preservarlo prima di interpretare eventuali switch.
 Installer PORT: formato Unraid, non Bash arbitrario; rifiutare riferimenti testuali a PORT fuori dalle assegnazioni ammesse invece di indovinare la porta, ignorando commenti e letterali innocui di altre variabili. Il controllo è statico, non interpreta Bash arbitrario od offuscato. Mantenere i messaggi di rifiuto prima di qualunque effetto.
+
+Argomenti rsync: vietare sia --remove-source-files sia l’alias storico --remove-sent-files, comprese le forme con =. Il rifiuto deve valere per impostazioni, pianificazione e worker di COPY/MOVE/GATHER/Validate/replay, prima di qualunque trasferimento.
