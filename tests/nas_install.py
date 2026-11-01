@@ -1,5 +1,8 @@
 """Prova del wrapper NAS con PHP reale e soli servizi/file sintetici."""
 import hashlib
+import ctypes
+import signal
+import time
 import json
 import os
 from pathlib import Path
@@ -16,7 +19,8 @@ VERSION = '2026.11.01.9'
 REVISION = 'cf6321e3b775b73c1bd106c2f41ee90bb015e43f'
 
 class NasInstallTests(unittest.TestCase):
- def run_case(self, mode='ok', running=True, busy=False, related=False, unrelated=False):
+ def run_case(self, mode='ok', running=True, busy=False, related=False, unrelated=False, terminated=None, mixed_live=False):
+  related=related or bool(terminated)
   php=os.environ.get('TEST_PHP_BIN') or shutil.which('php')
   if not php:self.skipTest('PHP reale richiesto')
   with tempfile.TemporaryDirectory(prefix='wrapper-',dir=TEST_ROOT) as tmp:
@@ -47,8 +51,10 @@ class NasInstallTests(unittest.TestCase):
    stub('id','echo 0\n')
    stub('sleep','exit 0\n')
    stub('pidof',f'[ -f "{root}/running" ] && {{ echo 42; exit 0; }}\nexit 1\n')
-   stub('pgrep','echo 987654\n' if related or unrelated else 'exit 1\n')
-   stub('ps','echo '+('42' if related else '1')+'\n')
+   processes='echo 987654; '+('echo 987655; ' if mixed_live else '')+'exit 0'
+   if terminated:processes=f'[ "$(cat "{code}/VERSION")" = "2026.09.11" ] || exit 1; '+processes
+   stub('pgrep',processes+'\n' if related or unrelated else 'exit 1\n')
+   stub('ps','case "$*" in *stat=*) '+('case "$*" in *987655*) echo S;; *) echo '+terminated+';; esac' if terminated else 'echo S')+';; *) '+('case "$*" in *987655*) echo 1;; *) echo 42;; esac' if related else 'echo 1')+';; esac\n')
    (stubs/'php').symlink_to(php)
    common='import os,sys,json,shutil\nfrom pathlib import Path\nr=Path(os.environ["NAS_FIXTURE_ROOT"])\nmode=os.environ["NAS_FIXTURE_MODE"]\n'
    stub('curl',common+'''
@@ -97,7 +103,7 @@ if mode=='dead_service' and (r/'running').exists():(r/'running').unlink()
    calls=(root/'calls').read_text().splitlines() if (root/'calls').exists() else []
    actions=(root/'actions').read_text().splitlines() if (root/'actions').exists() else []
    backups=list(persistent.glob('manual-install-*'))
-   if busy or related or mode in ['auth','bad_checksum','changed_state']:
+   if busy or (related and not terminated) or mixed_live or mode in ['auth','bad_checksum','changed_state']:
     self.assertNotEqual(result.returncode,0,output);self.assertNotIn('plugin',calls)
     self.assertEqual((code/'VERSION').read_text().strip(),'2026.09.11');self.assertEqual(actions,[])
     self.assertEqual(backups,[])
@@ -119,7 +125,7 @@ if mode=='dead_service' and (r/'running').exists():(r/'running').unlink()
     self.assertEqual((code/'RELEASE_REVISION').read_text().strip(),REVISION)
     self.assertEqual(boot.read_bytes(),(fixture/'unbalanced.plg').read_bytes())
     self.assertEqual((root/'running').exists(),running)
-    self.assertEqual(actions,[])
+    self.assertEqual(actions,['stop','start'] if terminated else [])
     # Riesecuzione idempotente e lock rilasciato.
     second=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True,timeout=5)
     self.assertEqual(second.returncode,0,second.stdout+second.stderr)
@@ -134,6 +140,10 @@ if mode=='dead_service' and (r/'running').exists():(r/'running').unlink()
  def test_busy_refuses_without_effects(self):self.run_case(busy=True)
  def test_related_rsync_refuses_without_effects(self):self.run_case(related=True)
  def test_unrelated_rsync_is_allowed(self):self.run_case(unrelated=True)
+ def test_zombie_rsync_is_not_an_active_transfer(self):self.run_case(terminated='Z')
+ def test_dead_rsync_is_not_an_active_transfer(self):self.run_case(terminated='X')
+ def test_zombie_does_not_override_busy_api(self):self.run_case(terminated='Z',busy=True)
+ def test_zombie_and_live_unattributed_rsync_still_block(self):self.run_case(terminated='Z',mixed_live=True)
  def test_legacy_auth_refuses_without_stopping(self):self.run_case(mode='auth')
  def test_bad_checksum_refuses_before_backup(self):self.run_case(mode='bad_checksum')
  def test_service_state_changed_refuses(self):self.run_case(mode='changed_state')
@@ -146,5 +156,35 @@ if mode=='dead_service' and (r/'running').exists():(r/'running').unlink()
  def test_dead_service_rolls_back(self):self.run_case(mode='dead_service')
  def test_unreachable_service_does_not_get_killed(self):self.run_case(mode='unreachable')
  def test_new_busy_operation_does_not_get_killed(self):self.run_case(mode='busy_after')
+
+class RealProcessDetectionTests(unittest.TestCase):
+ def test_real_zombie_is_ignored_but_sleeping_process_blocks(self):
+  text=(ROOT/'tools/install-nas-2026.11.01.9.sh').read_text()
+  function=text[text.index('assert_idle() {'):text.index('assert_unchanged() {')]
+  for terminated in [False,True]:
+   with self.subTest(terminated=terminated):
+    pid=os.fork()
+    if pid==0:
+     libc=ctypes.CDLL(None)
+     libc.prctl.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_ulong,ctypes.c_ulong,ctypes.c_ulong]
+     libc.prctl(15,b'rsync',0,0,0)
+     if terminated:os._exit(0)
+     while True:signal.pause()
+    try:
+     expected='Z' if terminated else 'S'
+     for _ in range(200):
+      stat=Path(f'/proc/{pid}/stat').read_text().split()[2]
+      if stat==expected and Path(f'/proc/{pid}/comm').read_text().strip()=='rsync':break
+      time.sleep(0.01)
+     else:self.fail('stato processo di prova non raggiunto')
+     script='set -euo pipefail\n'+function+f'\npidof() {{ echo {os.getpid()}; }}\npgrep() {{ echo {pid}; }}\nread_status() {{ echo 0; }}\nassert_idle\n[ "$legacy_cleanup" -eq 1 ]\n'
+     result=subprocess.run(['bash'],input=script,text=True,capture_output=True)
+     if terminated:self.assertEqual(result.returncode,0,result.stderr)
+     else:
+      self.assertNotEqual(result.returncode,0)
+      self.assertIn('Rsync di Unbalanced vivo',result.stderr)
+    finally:
+     if not terminated:os.kill(pid,signal.SIGKILL)
+     os.waitpid(pid,0)
 
 if __name__=='__main__':unittest.main()

@@ -16,6 +16,8 @@ manager=/usr/local/sbin/plugin
 backup= stage= original_hash= original_version=
 attempted=0
 was_running=0
+legacy_cleanup=0
+legacy_paused=0
 had_boot=0
 had_registration=0
 fail() { echo "ERRORE: $*" >&2; exit 1; }
@@ -51,13 +53,23 @@ read_status() {
     fi
 }
 assert_idle() {
-    local services transfer current parent depth status
+    local services transfer current parent depth status process_state terminated related live=""
+    legacy_cleanup=0
     services=$(pidof unbalanced) || services=""
     [ -n "$services" ] || return 0
     for transfer in $(pgrep -x rsync || true); do
-        current=$transfer; depth=0
+        process_state=$(ps -o stat= -p "$transfer" | awk 'NR==1 {print $1}') || process_state=""
+        terminated=0
+        case "$process_state" in
+            Z*|X*) terminated=1;;
+            R*|S*|D*|T*|t*|I*|P*|W*) live="$live $transfer:$process_state";;
+            *)
+                if [ -d "/proc/$transfer" ]; then echo "Stato rsync non verificabile (PID $transfer): nessun arresto" >&2; return 1; fi
+                continue;;
+        esac
+        current=$transfer; depth=0; related=0
         while [ "$current" -gt 1 ] && [ "$depth" -lt 64 ]; do
-            case " $services " in *" $current "*) echo "Rsync di Unbalanced attivo: nessun arresto" >&2; return 1;; esac
+            case " $services " in *" $current "*) related=1; break;; esac
             parent=$(ps -o ppid= -p "$current" | tr -d '[:space:]')
             case "$parent" in *[!0-9]*|'')
                 [ ! -d "/proc/$current" ] || return 1
@@ -66,7 +78,20 @@ assert_idle() {
             current=$parent; depth=$((depth+1))
         done
         [ "$depth" -lt 64 ] || return 1
+        if [ "$related" -eq 1 ]; then
+            if [ "$terminated" -eq 0 ]; then
+                echo "Rsync di Unbalanced vivo (PID $transfer, stato $process_state): nessun arresto" >&2
+                return 1
+            fi
+            echo "Rsync terminato non ancora raccolto (PID $transfer, stato $process_state)" >&2
+            legacy_cleanup=1
+        fi
     done
+    # Con figli terminati non attribuiamo eventuali rsync vivi/orfani ad altri job.
+    if [ "$legacy_cleanup" -eq 1 ] && [ -n "$live" ]; then
+        echo "Rsync vivi presenti insieme ai residui:$live; pulizia del servizio sospesa" >&2
+        return 1
+    fi
     status=$(read_status) || {
         echo "Stato non verificabile sulla porta $port: nessun arresto. Con legacy autenticato, concludere le operazioni e fermare il plugin dal gestore prima di riprovare." >&2
         return 1
@@ -168,10 +193,21 @@ assert_idle || fail "Installazione sospesa: nuova attività"
 assert_unchanged || fail "Stato precedente non più valido"
 echo "Installo $version; backup codice e manifest: $backup"
 attempted=1
+# La .9 conta anche i figli zombie: con API inattiva e nessun rsync vivo,
+# arrestare il vecchio demone prima del suo installer evita quel falso blocco.
+if [ "$legacy_cleanup" -eq 1 ]; then
+    echo "Servizio inattivo con soli rsync terminati: arresto controllato del vecchio demone"
+    "$code/scripts/stop" || fail "Arresto del vecchio servizio non riuscito"
+    if pidof unbalanced >/dev/null; then fail "Vecchio demone ancora presente"; fi
+    legacy_paused=1
+fi
 "$manager" install "$stage/unbalanced.plg" 9>&- > "$backup/install.log" 2>&1 || fail "Gestore plugin terminato con errore; log locale: $backup/install.log"
 [ "$(cat "$code/VERSION")" = "$version" ] && [ "$(cat "$code/RELEASE_REVISION")" = "$revision" ] || fail "Revisione installata inattesa"
 cmp -s "$stage/unbalanced.plg" "$boot_manifest" || fail "Manifest persistente non corrispondente alla release"
 if [ "$was_running" -eq 1 ]; then
+    if [ "$legacy_paused" -eq 1 ]; then
+        if ! pidof unbalanced >/dev/null; then "$code/scripts/start" 9>&- || fail "Avvio della .9 fallito"; fi
+    fi
     ok=0
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
         if healthy; then ok=1; break; fi
