@@ -2,10 +2,14 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -131,52 +135,6 @@ func TestResumeErrorsAndCancellation(t *testing.T) {
 		t.Fatal("symlink fuori root consentito")
 	}
 }
-func TestResumeBinAllocatesDeltaAndAllZeroItems(t *testing.T) {
-	ctx := context.Background()
-	items := []*domain.Item{{Name: "existing", Path: "share/existing", Location: "/source", Size: 3000}, {Name: "missing", Path: "share/missing", Location: "/source", Size: 600}, {Name: "also-existing", Path: "share/also-existing", Location: "/source", Size: 500}}
-	estimate := func(_ context.Context, c *domain.Command) (uint64, uint64, error) {
-		if c.Entry == "share/missing" {
-			return 600, 650, nil
-		}
-		return 0, 0, nil
-	}
-	disk := &domain.Disk{Name: "disk3", Path: "/target", Free: 1000}
-	bin, err := resumeBin(ctx, disk, items, 100, estimate, func(string) {})
-	if err != nil || len(bin.Items) != 3 || bin.Size != 600 || bin.RequiredSpace != 650 {
-		t.Fatalf("bin=%+v err=%v", bin, err)
-	}
-	for _, item := range items {
-		if item.Estimated {
-			t.Fatal("modificato item originale")
-		}
-	}
-	disk.Free = 50
-	bin, err = resumeBin(ctx, disk, items, 100, estimate, func(string) {})
-	if err != nil || len(bin.Items) != 2 || bin.Size != 0 {
-		t.Fatalf("zero sotto riserva: %+v %v", bin, err)
-	}
-	remaining := removeItems(append([]*domain.Item{}, items...), bin.Items)
-	if len(remaining) != 1 || remaining[0].Name != "missing" {
-		t.Fatal("assegnazione ha perso item")
-	}
-	// A second destination gets its own estimate, not the first disk's delta.
-	disk.Path = "/target2"
-	disk.Free = 1000
-	estimate2 := func(_ context.Context, c *domain.Command) (uint64, uint64, error) {
-		if c.Dst != "/target2" {
-			t.Fatal(c.Dst)
-		}
-		return 600, 650, nil
-	}
-	bin, err = resumeBin(ctx, disk, remaining, 100, estimate2, func(string) {})
-	if err != nil || len(bin.Items) != 1 {
-		t.Fatal(bin, err)
-	}
-	_, err = resumeBin(ctx, disk, items, 100, func(context.Context, *domain.Command) (uint64, uint64, error) { return 0, 0, fmt.Errorf("read failed") }, func(string) {})
-	if err == nil {
-		t.Fatal("errore non ha invalidato bin")
-	}
-}
 func TestTransferStatsFailClosed(t *testing.T) {
 	for _, s := range []string{"", "Total transferred file size: 0 bytes", "Total transferred file size: rubbish\nNumber of created files: 0\nNumber of regular files transferred: 0", "Total transferred file size: 18446744073709551615 bytes\nNumber of created files: 1\nNumber of regular files transferred: 1"} {
 		if _, _, err := parseTransferStats(s); err == nil {
@@ -218,5 +176,126 @@ func TestStopCancelsComparisonContext(t *testing.T) {
 	c.clearPlanContext()
 	if c.currentComparisonContext().Err() != nil {
 		t.Fatal("cancelled context leaked into next operation")
+	}
+}
+
+func TestResumeChoosesPartialDestinationBeforeFreeSpace(t *testing.T) {
+	bin := testRsync(t)
+	src := t.TempDir()
+	a := t.TempDir()
+	b := t.TempDir()
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("share/series/%02d.cbz", i)
+		writeResumeFile(t, src, name, strings.Repeat("x", 1000))
+		if i < 9 {
+			writeResumeFile(t, b, name, strings.Repeat("x", 1000))
+		}
+	}
+	disks := []*domain.Disk{{Name: "A", Path: a, Free: 1e9}, {Name: "B", Path: b, Free: 1e8}}
+	item := &domain.Item{Name: "series", Path: "share/series", Location: src, Size: 10000}
+	estimate := func(ctx context.Context, c *domain.Command) (uint64, uint64, error) {
+		return estimateTransfer(ctx, bin, c, []string{"-X"})
+	}
+	bins, err := resumeBins(context.Background(), disks, []*domain.Item{item}, func(*domain.Disk) uint64 { return 100 }, estimate, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bins[a] != nil || bins[b] == nil || bins[b].Size != 1000 {
+		t.Fatalf("wrong allocation: %+v", bins)
+	}
+	c := &Core{state: &domain.State{Unraid: &domain.Unraid{Disks: append(disks, &domain.Disk{Path: src})}}}
+	command := &domain.Command{Src: src, Dst: b, Entry: item.Path}
+	if err := c.otherDestinationCopies(command); err != nil {
+		t.Fatal(err)
+	}
+	writeResumeFile(t, a, "share/series/partial.cbz", "truncated")
+	if err := c.otherDestinationCopies(command); err == nil {
+		t.Fatal("MOVE would leave another partial copy")
+	}
+}
+func TestQuietAndStderrFlagsDoNotBreakComparison(t *testing.T) {
+	bin := testRsync(t)
+	src := t.TempDir()
+	dst := t.TempDir()
+	writeResumeFile(t, src, "share/file", "content")
+	for _, flags := range [][]string{{"-q"}, {"--quiet"}, {"--msgs2stderr"}, {"-aqX"}} {
+		n, _, err := estimateTransfer(context.Background(), bin, &domain.Command{Src: src, Dst: dst, Entry: "share"}, flags)
+		if err != nil || n != 7 {
+			t.Fatalf("%v: %d %v", flags, n, err)
+		}
+	}
+}
+func TestXattrSpaceIncludesAllocationAndMetadataOnlyChanges(t *testing.T) {
+	bin := testRsync(t)
+	src := t.TempDir()
+	dst := t.TempDir()
+	for i := 0; i < 8; i++ {
+		name := fmt.Sprintf("share/%d", i)
+		writeResumeFile(t, src, name, "a")
+		if err := unix.Setxattr(filepath.Join(src, name), "user.synthetic", []byte(strings.Repeat("x", 60000)), 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	command := &domain.Command{Src: src, Dst: dst, Entry: "share"}
+	_, space, err := estimateTransfer(context.Background(), bin, command, []string{"-X"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "-aRX", "--", "share", dst)
+	cmd.Dir = src
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	var allocated uint64
+	filepath.Walk(filepath.Join(dst, "share"), func(_ string, info os.FileInfo, e error) error {
+		if e != nil {
+			return e
+		}
+		allocated += uint64(info.Sys().(*syscall.Stat_t).Blocks) * 512
+		return nil
+	})
+	if space < allocated {
+		t.Fatalf("xattr underestimate: %d < %d", space, allocated)
+	}
+	n, required, err := estimateTransfer(context.Background(), bin, command, []string{"-X"})
+	if err != nil || n != 0 || required != 0 {
+		t.Fatalf("complete copy: %d %d %v", n, required, err)
+	}
+	if err := unix.Setxattr(filepath.Join(src, "share/0"), "user.synthetic", []byte(strings.Repeat("y", 60000)), 0); err != nil {
+		t.Fatal(err)
+	}
+	n, required, err = estimateTransfer(context.Background(), bin, command, []string{"-X"})
+	if err != nil || n != 0 || required < 60000 {
+		t.Fatalf("metadata-only xattr: %d %d %v", n, required, err)
+	}
+}
+func TestAllocationErrorsInvalidateWholePlan(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := resumeBins(ctx, []*domain.Disk{{Path: "/target"}}, []*domain.Item{{Path: "share"}}, func(*domain.Disk) uint64 { return 0 }, func(context.Context, *domain.Command) (uint64, uint64, error) { return 0, 0, nil }, func(string) {})
+	if err == nil {
+		t.Fatal("cancel ignored")
+	}
+	sentinel := errors.New("comparison failure")
+	_, err = resumeBins(context.Background(), []*domain.Disk{{Path: "/target"}}, []*domain.Item{{Path: "share"}}, func(*domain.Disk) uint64 { return 0 }, func(context.Context, *domain.Command) (uint64, uint64, error) { return 0, 0, sentinel }, func(string) {})
+	if !errors.Is(err, sentinel) {
+		t.Fatal(err)
+	}
+	if common.CmdVerificationFailed == common.CmdFlagged || common.CmdVerificationFailed == common.CmdSourceRemoval {
+		t.Fatal("rollback exposes source deletion")
+	}
+}
+
+func TestCompleteFoldersFitBelowReserve(t *testing.T) {
+	disks := []*domain.Disk{{Path: "/target", Free: 50}}
+	items := []*domain.Item{{Path: "share/one"}, {Path: "share/two"}, {Path: "share/missing"}}
+	bins, err := resumeBins(context.Background(), disks, items, func(*domain.Disk) uint64 { return 100 }, func(_ context.Context, c *domain.Command) (uint64, uint64, error) {
+		if strings.HasSuffix(c.Entry, "missing") {
+			return 1, 4096, nil
+		}
+		return 0, 0, nil
+	}, func(string) {})
+	if err != nil || bins["/target"] == nil || len(bins["/target"].Items) != 2 {
+		t.Fatal(bins, err)
 	}
 }

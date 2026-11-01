@@ -60,4 +60,5 @@ const (
 	CmdStopped
 	CmdSourceRemoval
 	CmdInProgress
+	CmdVerificationFailed // Unknown to old UI: never offers unsafe Remove source after rollback.
 )

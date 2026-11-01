@@ -64,6 +64,8 @@ $unbalanced_version = shell_exec("cat /usr/local/emhttp/plugins/unbalanced/VERSI
 	margin-bottom: 6px;
 }
 .unbalanced-settings-panel .info-content {
+    overflow-wrap: anywhere;
+    min-width: 0;
 	line-height: 1.5;
 }
 .unbalanced-settings-actions {

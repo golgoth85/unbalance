@@ -432,7 +432,7 @@ func getTopic(status uint64) string {
 }
 
 func (c *Core) planCancelled(topic string) {
-	c.state.Status = common.OpNeutral
+	c.setStatus(common.OpNeutral)
 	c.clearPlanContext()
 
 	logger.Blue("planning cancelled by the user")

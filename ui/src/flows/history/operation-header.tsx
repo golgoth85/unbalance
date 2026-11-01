@@ -31,8 +31,9 @@ export const OperationHeader: React.FunctionComponent<Props> = ({
     !operation.dryRun && operation.opKind === Op.ScatterCopy && safe;
 
   const flagged = operation.commands.some(
-    (command) => command.status === CommandStatus.Flagged,
+    (command) => command.status === CommandStatus.Flagged || command.status === CommandStatus.VerificationFailed,
   );
+  const legacyFlagged = operation.commands.some(command => command.status === CommandStatus.Flagged);
   const operationStatus = flagged ? (
     <Icon
       name="check-circle"
@@ -115,7 +116,7 @@ export const OperationHeader: React.FunctionComponent<Props> = ({
           </div>
         </div>
       </div>
-      {canBeFlagged && flagged ? (
+      {canBeFlagged && legacyFlagged ? (
         <div className="text-sm text-slate-500 dark:text-gray-500">
           <p>
             One or more commands had an execution warning/error. Check

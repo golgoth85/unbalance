@@ -68,7 +68,8 @@ type Core struct {
 	pendingPlans   map[string]*planTicket
 	pendingPlansMu sync.Mutex
 
-	stopped atomic.Bool
+	stopped      atomic.Bool
+	healthStatus atomic.Uint64
 
 	planMu        sync.Mutex
 	planCancel    context.CancelFunc
@@ -108,7 +109,7 @@ func (c *Core) Start() error {
 		return err
 	}
 
-	c.state.Status = common.OpNeutral
+	c.setStatus(common.OpNeutral)
 	c.state.Unraid = unraid
 
 	history, err := c.historyRead()
@@ -163,7 +164,7 @@ func (c *Core) mailboxHandler() {
 				logger.Red("unable to unmarshal %s packet: %s", packet.Topic, err)
 				continue
 			}
-			go c.scatterMove(ref.PlanID)
+			c.scatterMove(ref.PlanID)
 		case common.CommandScatterCopy:
 			var ref planRef
 			err := lib.Bind(packet.Payload, &ref)
@@ -171,7 +172,7 @@ func (c *Core) mailboxHandler() {
 				logger.Red("unable to unmarshal %s packet: %s", packet.Topic, err)
 				continue
 			}
-			go c.scatterCopy(ref.PlanID)
+			c.scatterCopy(ref.PlanID)
 
 		case common.CommandGatherPlanStart:
 			var setup domain.GatherSetup
@@ -189,7 +190,7 @@ func (c *Core) mailboxHandler() {
 				logger.Red("unable to unmarshal %s packet: %s", packet.Topic, err)
 				continue
 			}
-			go c.gatherMove(ref.PlanID, ref.Target)
+			c.gatherMove(ref.PlanID, ref.Target)
 
 		case common.CommandScatterValidate:
 			var ref operationRef
@@ -198,7 +199,7 @@ func (c *Core) mailboxHandler() {
 				logger.Red("unable to unmarshal %s packet: %s", packet.Topic, err)
 				continue
 			}
-			go c.scatterValidate(ref.OperationID)
+			c.scatterValidate(ref.OperationID)
 
 		case common.CommandRemoveSource:
 			var ref commandRef
@@ -207,7 +208,7 @@ func (c *Core) mailboxHandler() {
 				logger.Red("unable to unmarshal %s packet: %s", packet.Topic, err)
 				continue
 			}
-			go c.removeSourceByID(ref.OperationID, ref.CommandID)
+			c.removeSourceByID(ref.OperationID, ref.CommandID)
 
 		case common.CommandReplay:
 			var ref operationRef
@@ -217,7 +218,7 @@ func (c *Core) mailboxHandler() {
 				continue
 			}
 
-			go c.replay(ref.OperationID)
+			c.replay(ref.OperationID)
 
 		case common.CommandStop:
 			c.stopped.Store(true)
@@ -419,3 +420,7 @@ func (c *Core) updateHistory(history *domain.History, operation *domain.Operatio
 		}
 	}()
 }
+
+// Health probes must not race the worker's status updates or expose state data.
+func (c *Core) HealthStatus() uint64    { return c.healthStatus.Load() }
+func (c *Core) setStatus(status uint64) { c.state.Status = status; c.healthStatus.Store(status) }

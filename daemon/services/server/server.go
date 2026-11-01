@@ -96,6 +96,7 @@ func (s *Server) Start() error {
 
 	api := s.engine.Group(common.APIEndpoint)
 	api.GET("/auth/status", s.authStatus)
+	api.GET("/health", s.health)
 	api.POST("/auth/login", s.login)
 	api.POST("/auth/setup", s.setup)
 	api.POST("/auth/logout", s.logout, s.requireAuth, s.requireCSRF)
@@ -467,4 +468,12 @@ func (s *Server) setRefreshRate(c echo.Context) error {
 	}
 
 	return c.JSON(200, s.core.SetRefreshRate(value))
+}
+
+// Minimal public probe: no paths, history, configuration or credentials.
+func (s *Server) health(c echo.Context) error {
+	return c.JSON(http.StatusOK, struct {
+		Status  uint64 `json:"status"`
+		Version string `json:"version"`
+	}{s.core.HealthStatus(), s.ctx.Config.Version})
 }
