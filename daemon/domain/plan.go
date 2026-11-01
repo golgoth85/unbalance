@@ -13,9 +13,10 @@ import (
 // OpScatterPlan
 // OpGatherPlan
 type Plan struct {
-	ID      string    `json:"id"`
-	Started time.Time `json:"started"`
-	Ended   time.Time `json:"ended"`
+	RsyncArgs []string  `json:"rsyncArgs,omitempty"`
+	ID        string    `json:"id"`
+	Started   time.Time `json:"started"`
+	Ended     time.Time `json:"ended"`
 
 	// plan section
 	ChosenFolders []string          `json:"chosenFolders"`

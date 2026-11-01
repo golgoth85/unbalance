@@ -16,12 +16,14 @@ export const Command: React.FunctionComponent<Props> = ({
   canBeFlagged = false,
   onFlag,
 }) => {
-  const progress = ((command.transferred / command.size) * 100).toFixed(0);
+  const progress = command.size > 0
+    ? Math.min(100, (command.transferred / command.size) * 100).toFixed(0)
+    : command.status === CommandStatus.Complete ? '100' : '0';
   const onClick = () => onFlag?.(command);
 
   return (
-    <div className="grid grid-cols-12 gap-1 items-center text-sm text-gray-500 dark:text-gray-500 p-2 border-b border-slate-300 dark:border-gray-700 ">
-      <div className="col-span-2 flex items-center">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-center text-sm text-gray-500 dark:text-gray-500 p-2 border-b border-slate-300 dark:border-gray-700 ">
+      <div className="lg:col-span-2 flex min-w-0 break-all items-center">
         {(command.status === CommandStatus.SourceRemoval ||
           command.status === CommandStatus.Flagged) &&
         canBeFlagged ? (
@@ -36,11 +38,11 @@ export const Command: React.FunctionComponent<Props> = ({
         <span className="pr-2" />
         {command.src}
       </div>
-      <div className="col-span-8">
+      <div className="lg:col-span-8 min-w-0 break-all">
         rsync {rsyncStrArgs} &quot;{command.entry}&quot; &quot;{command.dst}
         &quot;
       </div>
-      <div className="col-span-2 flex flex-1 flex-row items-center">
+      <div className="lg:col-span-2 flex flex-1 flex-row items-center">
         {progress !== '100' && <span className="text-xs">{progress} %</span>}
         <span className="px-1" />
         <div className="flex-1 rounded bg-gray-400 dark:bg-gray-800">
@@ -51,7 +53,7 @@ export const Command: React.FunctionComponent<Props> = ({
         </div>
       </div>
       {command.reason && (
-        <div className="col-span-12 text-xs text-yellow-600 dark:text-yellow-600">
+        <div className="lg:col-span-12 break-all text-xs text-yellow-600 dark:text-yellow-600">
           {command.reason}
         </div>
       )}

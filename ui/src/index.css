@@ -48,3 +48,36 @@
     @apply bg-white dark:bg-gray-900 text-slate-700 dark:text-gray-300;
   }
 }
+
+/* Layout adattabile senza nascondere comandi o contenuti fuori schermo. */
+@layer components {
+  .nav-link { @apply inline-flex min-h-11 items-center px-3 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500; }
+}
+:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+button, input, select { max-width: 100%; }
+@media (max-width: 1023px) {
+  .app-shell { height: auto; }
+  .responsive-panels[data-panel-group] {
+    flex-direction: column !important;
+    height: auto !important;
+    overflow: visible !important;
+    gap: 12px;
+  }
+  .responsive-panels > [data-panel] {
+    flex: 0 0 auto !important;
+    width: 100%;
+    height: 24rem;
+    min-width: 0;
+  }
+  .responsive-panels > [data-panel-resize-handle-id] { display: none; }
+  .flow-navbar > .flow-controls { flex-basis: 100%; order: 3; }
+  .flow-controls > div { max-width: 100%; }
+  .flow-controls > div:first-child { width: 100%; }
+  .stepper { font-size: 0.875rem; }
+  .stepper li { min-width: 0; }
+  .stepper h3 { overflow-wrap: anywhere; }
+  .history-list { height: 20rem; }
+  .history-detail { height: 30rem; }
+  .command-list { height: 28rem; }
+  .panel-scroll { overflow-wrap: anywhere; }
+}

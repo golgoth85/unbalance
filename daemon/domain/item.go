@@ -2,11 +2,14 @@ package domain
 
 // Item -
 type Item struct {
-	Name       string `json:"name"`
-	Size       uint64 `json:"size"`
-	Path       string `json:"path"`
-	Location   string `json:"location"`
-	BlocksUsed uint64 `json:"blocksUsed"`
+	Estimated     bool   `json:"estimated,omitempty"`
+	TransferSize  uint64 `json:"transferSize,omitempty"`
+	RequiredSpace uint64 `json:"requiredSpace,omitempty"`
+	Name          string `json:"name"`
+	Size          uint64 `json:"size"`
+	Path          string `json:"path"`
+	Location      string `json:"location"`
+	BlocksUsed    uint64 `json:"blocksUsed"`
 }
 
 // // BySize -

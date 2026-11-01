@@ -37,8 +37,8 @@ export const Targets: React.FunctionComponent = () => {
     >
       {visible &&
         elegible.map((disk) => (
-          <div className="flex flex-row items-center">
-            <Checkbox checked={targets[disk.name]} onCheck={onCheck(disk)} />
+          <div key={disk.id} className="flex flex-row items-center min-w-0">
+            <Checkbox label={`Destinazione ${disk.name}`} checked={targets[disk.name]} onCheck={onCheck(disk)} />
             <div className="pr-4" />
             <Disk disk={disk} />
           </div>

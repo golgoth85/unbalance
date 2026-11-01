@@ -71,7 +71,29 @@ $unbalanced_version = shell_exec("cat /usr/local/emhttp/plugins/unbalanced/VERSI
 	gap: 12px;
 	justify-content: flex-end;
 	max-width: 920px;
-	margin-top: 24px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+}
+@media (max-width: 767px) {
+    .unbalanced-settings-panel {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+        width: 100%;
+    }
+    .unbalanced-settings-panel .label { text-align: left; padding-top: 12px; }
+    .unbalanced-settings-panel .info-block { grid-column: 1 / -1; }
+    .unbalanced-settings-panel .field input,
+    .unbalanced-settings-panel .field select {
+        box-sizing: border-box;
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+        min-height: 44px;
+    }
+    .unbalanced-settings-panel .help-text { overflow-wrap: anywhere; }
+    .unbalanced-settings-actions { justify-content: flex-start; }
+    .unbalanced-settings-actions input,
+    .unbalanced-settings-actions button { min-height: 44px; }
 }
 </style>
 

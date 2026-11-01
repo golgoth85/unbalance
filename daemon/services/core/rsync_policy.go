@@ -6,6 +6,10 @@ import (
 )
 
 var blockedRsyncArgReasons = map[string]string{
+	"--log-file":            "planning must not write log files",
+	"--write-batch":         "batch output is outside the local transfer model",
+	"--only-write-batch":    "batch output does not transfer data",
+	"--read-batch":          "batch input is outside the local transfer model",
 	"--remove-source-files": "unbalanced manages source deletion after validated transfers",
 	"--rsync-path":          "remote rsync command execution is outside unbalanced's local transfer model",
 	"--rsh":                 "remote shell execution is outside unbalanced's local transfer model",

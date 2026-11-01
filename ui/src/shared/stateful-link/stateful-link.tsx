@@ -20,7 +20,7 @@ export const StatefulLink: React.FunctionComponent<StatefulLinkProps> = ({
 }) =>
   disabled ? (
     <span
-      className="ml-4 cursor-not-allowed text-sky-700 dark:text-slate-400"
+      className="nav-link cursor-not-allowed text-sky-700 dark:text-slate-400"
       aria-disabled="true"
     >
       {children}

@@ -32,20 +32,23 @@ export const TreeNode: React.FunctionComponent<TreeNodeProps> = ({
     return (
       <>
         {!node.leaf ? (
-          <span onClick={() => onExpandCollapse(node)}>
+          <button type="button" aria-label={`Apri o chiudi ${node.label}`} aria-expanded={node.expanded} className="min-w-11 min-h-11 flex items-center justify-center" onClick={() => onExpandCollapse(node)}>
             {node.expanded ? icons.collapseIcon : icons.expandIcon}
-          </span>
+          </button>
         ) : (
           <span>{icons.hiddenIcon}</span>
         )}
 
-        <span
-          className="ml-1"
+        <button
+          type="button"
+          aria-label={`Seleziona ${node.label}`}
+          aria-pressed={node.checked}
+          className="ml-1 min-w-11 min-h-11 flex items-center justify-center"
           onMouseDown={(e) => e.shiftKey && e.preventDefault()}
           onClick={(e) => onCheckUncheck(node, e.shiftKey)}
         >
           {node.checked ? icons.checkedIcon : icons.uncheckedIcon}
-        </span>
+        </button>
 
         <span className="ml-1">
           {node.leaf
@@ -71,6 +74,7 @@ export const TreeNode: React.FunctionComponent<TreeNodeProps> = ({
       {node.expanded &&
         getChildNodes(node).map((childNode) => (
           <TreeNode
+            key={childNode.id}
             node={childNode}
             getChildNodes={getChildNodes}
             onExpandCollapse={onExpandCollapse}

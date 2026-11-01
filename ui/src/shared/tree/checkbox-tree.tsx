@@ -33,6 +33,7 @@ export const CheckboxTree: React.FunctionComponent<CheckboxTreeProps> = ({
     <>
       {getRootNodes(nodes).map((node) => (
         <TreeNode
+          key={node.id}
           node={node}
           getChildNodes={getChildNodes}
           onExpandCollapse={onExpandCollapse}

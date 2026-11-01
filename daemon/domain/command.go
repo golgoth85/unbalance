@@ -2,6 +2,7 @@ package domain
 
 // Command -
 type Command struct {
+	Estimated   bool   `json:"estimated,omitempty"`
 	ID          string `json:"id"`
 	Src         string `json:"src"`
 	Dst         string `json:"dst"`

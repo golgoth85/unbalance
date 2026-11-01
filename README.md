@@ -1,3 +1,29 @@
+# Fork NASdelPala
+
+Fork personale di `jbrodriguez/unbalance`, mantenuto su `golgoth85/unbalance`.
+La pianificazione Scatter confronta sorgente e destinazione con rsync e riserva
+solo lo spazio richiesto dai file mancanti/modificati, più un margine. I file
+modificati vengono stimati per intero, per coprire i temporanei di rsync.
+Le cartelle già complete restano nel piano. La stima non è un conteggio dei byte
+fisicamente scritti; il dashboard indica dati previsti elaborati o simulati.
+
+MOVE dei nuovi piani verifica la destinazione con checksum, senza filtri utente,
+prima di cancellare gli originali. Errori e differenze preservano la sorgente;
+STOP interrompe anche i confronti e la verifica. I piani devono essere rigenerati
+se cambiano le opzioni rsync. Non scrivere sui file coinvolti durante il trasferimento.
+L'interfaccia web e la pagina impostazioni Unraid si adattano a telefono e tablet.
+
+I pacchetti del fork si trovano nelle [release](https://github.com/golgoth85/unbalance/releases).
+L'installer aggiorna un'installazione esistente sulla porta 7090, preserva
+configurazione e cronologia, verifica l'inattività, salva il codice precedente e
+ripristina il codice se non supera il controllo HTTP. Non installare mentre
+rsync o Unbalanced stanno lavorando. Non cambiano dati utente o schema.
+I vecchi record di cronologia mantengono il comportamento della versione che li ha generati.
+
+Per sviluppo e verifiche consultare `AGENTS.md`; lo stato è in `ROADMAP.md`.
+
+---
+
 # unbalanced
 
 _tl;dr_ **unbalanced** is an [Unraid](https://unraid.net/) plugin to transfer files/folders between disks in your array.

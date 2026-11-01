@@ -58,12 +58,11 @@ export const Flags: React.FunctionComponent = () => {
       </h1>
       <div className="pb-4" />
 
-      <div className="flex flex-row items-center">
+      <div className="flex flex-wrap gap-y-3 items-center">
         <Input
           type="text"
           placeholder="rsync flags"
           className="w-40"
-          defaultValue={flags.join(' ')}
           value={flagsValue}
           onChange={onFlagsChange}
         />
