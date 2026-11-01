@@ -47,9 +47,22 @@ bundle="$persistent/unbalanced-##version##.tgz"
     echo "Configurazione esistente richiesta"; exit 1;
 }
 # Read only PORT, never source/evaluate the configuration or print credentials.
-# These shell commands can set/unset PORT outside the supported assignment grammar.
-if grep -Eq '^[[:space:]]*(declare|typeset|local|readonly|unset)([[:space:]]+-[^[:space:]]+)*[[:space:]]+PORT([[:space:]=]|$)' "$persistent/unbalanced.cfg"; then
-    echo "Dichiarazione o unset PORT non supportati: installazione sospesa; usare PORT=numero"; exit 1
+# Reject textual references to PORT outside the supported assignment grammar.
+# Ignore comments and unrelated scalar literals, including a username "PORT".
+# This is a conservative syntax check, not a Bash interpreter.
+if ! awk '
+    BEGIN {
+        prefix="^[[:space:]]*(export[[:space:]]+)?[[:alpha:]_][[:alnum:]_]*="
+        tail="([[:space:]]+#.*|[[:space:]]*)$"
+        quote=sprintf("%c",39)
+        literal=prefix "(\"[^\"$`\\\\]*\"|" quote "[^" quote "]*" quote "|[[:alnum:]_./:@%+,=-]*)" tail
+    }
+    /^[[:space:]]*(#|$)/ { next }
+    /^[[:space:]]*(export[[:space:]]+)?PORT[[:space:]]*=/ { next }
+    $0 ~ literal { next }
+    /(^|[^[:alnum:]_])PORT([^[:alnum:]_]|$)/ { exit 1 }
+' "$persistent/unbalanced.cfg"; then
+    echo "PORT fuori grammatica supportata: installazione sospesa; usare PORT=numero"; exit 1
 fi
 port_lines=$(sed -nE '/^[[:space:]]*(export[[:space:]]+)?PORT[[:space:]]*=/p' "$persistent/unbalanced.cfg")
 if [ -z "$port_lines" ]; then

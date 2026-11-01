@@ -27,4 +27,4 @@ Xattr GATHER: proteggere file, cartelle e genitori impliciti trasferiti da -R, s
 PORT: assente usa 7090 anche in scripts/start; valori invalidi vanno fermati prima del killall. Installer rifiuta CR nella riga PORT e accetta export PORT=numero; non esegue la configurazione.
 
 La politica GATHER deve essere visibile per default prima del MOVE. Nel parser rsync, --no-OPTION è uno switch; se un token è il valore di un'altra opzione, preservarlo prima di interpretare eventuali switch.
-Installer PORT: formato Unraid, non Bash arbitrario; rifiutare dichiarazioni/unset esplicitamente invece di indovinare la porta. Mantenere i messaggi di rifiuto prima di qualunque effetto.
+Installer PORT: formato Unraid, non Bash arbitrario; rifiutare riferimenti testuali a PORT fuori dalle assegnazioni ammesse invece di indovinare la porta, ignorando commenti e letterali innocui di altre variabili. Il controllo è statico, non interpreta Bash arbitrario od offuscato. Mantenere i messaggi di rifiuto prima di qualunque effetto.
