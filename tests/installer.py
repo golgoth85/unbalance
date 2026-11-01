@@ -8,7 +8,7 @@ import tarfile
 import tempfile
 import unittest
 ROOT = Path(__file__).resolve().parents[1]
-VERSION='2026.11.01.3'
+VERSION='2026.11.01.4'
 
 class InstallerTests(unittest.TestCase):
  def run_case(self,busy=False,running=True,state='neutral',healthy=True,start_fails=False,port=7090,legacy_auth=False,boot=False,reinstall=False,legacy_folder=False,seed_backups=False,unrelated=False,port_text=None,invalid_port=False):
