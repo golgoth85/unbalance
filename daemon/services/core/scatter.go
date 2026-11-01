@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -45,7 +44,7 @@ func (c *Core) scatterPlanPrepare(setup domain.ScatterSetup) {
 		}
 	}
 
-	c.state.Status = common.OpScatterPlan
+	c.setStatus(common.OpScatterPlan)
 	c.state.Unraid = unraid
 
 	// make sure a previous stop request doesn't cancel this plan
@@ -139,42 +138,32 @@ func (c *Core) scatterPlanStart(ctx context.Context, plan *domain.Plan) {
 	// Initialize fields
 	plan.BytesToTransfer = 0
 
+	bins, err := resumeBins(ctx, dstDisks, items, func(d *domain.Disk) uint64 { return lib.Max(common.ReservedSpace, c.getReservedAmount(d.Size)) }, func(ctx context.Context, cmd *domain.Command) (uint64, uint64, error) {
+		return estimateTransfer(ctx, "/usr/bin/rsync", cmd, plan.RsyncArgs)
+	}, func(path string) {
+		c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventScatterPlanProgress, Payload: "Confronto " + path}, "socket:broadcast")
+	})
+	if err != nil {
+		cancelled := ctx.Err() != nil || c.stopped.Load()
+		c.planCancelled(common.EventScatterPlanCancelled)
+		if !cancelled {
+			c.publishOperationError("Pianificazione interrotta: %s", err)
+		}
+		return
+	}
 	for _, disk := range dstDisks {
-		msg := fmt.Sprintf("Trying to allocate items to %s ...", disk.Name)
-		packet = &domain.Packet{Topic: common.EventScatterPlanProgress, Payload: msg}
-		c.ctx.Hub.Pub(packet, "socket:broadcast")
-		logger.Blue("scatterPlan:%s", msg)
-
-		reserved := c.getReservedAmount(disk.Size)
-
-		ceil := lib.Max(common.ReservedSpace, reserved)
-		logger.Blue("scatterPlan:ItemsLeft(%d):ReservedSpace(%d)", len(items), ceil)
-
-		bin, err := resumeBin(ctx, disk, items, ceil, func(ctx context.Context, cmd *domain.Command) (uint64, uint64, error) {
-			return estimateTransfer(ctx, "/usr/bin/rsync", cmd, plan.RsyncArgs)
-		}, func(path string) {
-			c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventScatterPlanProgress, Payload: fmt.Sprintf("Confronto %s su %s", path, disk.Name)}, "socket:broadcast")
-		})
-		if err != nil {
-			cancelled := ctx.Err() != nil || c.stopped.Load()
-			c.planCancelled(common.EventScatterPlanCancelled)
-			if !cancelled {
-				c.publishOperationError("Pianificazione interrotta: %s", err)
-			}
-			return
+		bin := bins[disk.Path]
+		if bin == nil {
+			continue
 		}
-		if bin != nil && len(bin.Items) > 0 {
-			plan.VDisks[disk.Path].Bin = bin
-			plan.VDisks[disk.Path].PlannedFree -= bin.RequiredSpace
-			for _, item := range bin.Items {
-				plan.VDisks[srcDisk.Path].PlannedFree += item.Size
-			}
-
-			plan.BytesToTransfer += bin.Size
-
-			toBeTransferred = append(toBeTransferred, bin.Items...)
-			items = removeItems(items, bin.Items)
+		plan.VDisks[disk.Path].Bin = bin
+		plan.VDisks[disk.Path].PlannedFree -= bin.RequiredSpace
+		for _, item := range bin.Items {
+			plan.VDisks[srcDisk.Path].PlannedFree += item.Size
 		}
+		plan.BytesToTransfer += bin.Size
+		toBeTransferred = append(toBeTransferred, bin.Items...)
+		items = removeItems(items, bin.Items)
 	}
 
 	c.endPlan(c.state.Status, plan, c.state.Unraid.Disks, items, toBeTransferred)
@@ -183,7 +172,7 @@ func (c *Core) scatterPlanStart(ctx context.Context, plan *domain.Plan) {
 }
 
 func (c *Core) scatterPlanEnd(plan *domain.Plan) {
-	c.state.Status = common.OpNeutral
+	c.setStatus(common.OpNeutral)
 	c.clearPlanContext()
 
 	planView, err := c.storePendingPlan(planFlowScatter, plan)
@@ -218,7 +207,7 @@ func (c *Core) scatterMove(planID string) {
 		c.publishOperationError("Le opzioni rsync sono cambiate: rigenerare il piano")
 		return
 	}
-	c.state.Status = common.OpScatterMove
+	c.setStatus(common.OpScatterMove)
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterOperation(plan)
 
@@ -237,7 +226,7 @@ func (c *Core) scatterCopy(planID string) {
 		c.publishOperationError("Le opzioni rsync sono cambiate: rigenerare il piano")
 		return
 	}
-	c.state.Status = common.OpScatterCopy
+	c.setStatus(common.OpScatterCopy)
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterOperation(plan)
 
@@ -311,7 +300,7 @@ func (c *Core) scatterValidate(operationID string) {
 		return
 	}
 
-	c.state.Status = common.OpScatterValidate
+	c.setStatus(common.OpScatterValidate)
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterValidateOperation(operation)
 

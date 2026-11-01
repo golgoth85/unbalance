@@ -43,70 +43,100 @@ set -eu
 code=/usr/local/emhttp/plugins/unbalanced
 persistent=/boot/config/plugins/unbalanced
 bundle="$persistent/unbalanced-##version##.tgz"
-
-# A plugin update must never interrupt a real transfer (including manual rsync).
+[ -f "$persistent/unbalanced.cfg" ] && [ -f "$persistent/unbalanced.env" ] || {
+    echo "Configurazione esistente richiesta"; exit 1;
+}
+# Read only PORT, never source/evaluate the configuration or print credentials.
+port=$(sed -nE 's/^PORT="?([0-9]+)"?$/\1/p' "$persistent/unbalanced.cfg")
+port=${port:-7090}
+case "$port" in *[!0-9]*|'') echo "Porta non valida"; exit 1;; esac
+[ "$port" -gt 0 ] && [ "$port" -le 65535 ] || exit 1
+endpoint="http://127.0.0.1:$port"
 running=0
 assert_idle() {
-    if pgrep -x rsync >/dev/null; then
-        echo "Installazione sospesa: rsync attivo. Nessun servizio interrotto."
-        exit 1
-    fi
+    if pgrep -x rsync >/dev/null; then echo "Installazione sospesa: rsync attivo"; exit 1; fi
     if pidof unbalanced >/dev/null; then
         running=1
-        # State.Status is the first JSON field. Do not inspect secrets/config.
-        state=$(curl -fsS --max-time 10 http://127.0.0.1:7090/api/state) || {
-            echo "Impossibile verificare che Unbalanced sia inattivo: installazione sospesa."
-            exit 1
-        }
-        case "$state" in
-            '{"status":0,'*) ;;
-            *) echo "Unbalanced occupato o stato non verificabile: installazione sospesa."; exit 1 ;;
-        esac
+        state=$(curl -fsS --max-time 10 "$endpoint/api/health") || state=""
+        # Legacy releases have no public health endpoint. Authenticated legacy
+        # services must be stopped explicitly; auth/status cannot prove idle.
+        case "$state" in '{"status":'*) ;; *) state=$(curl -fsS --max-time 10 "$endpoint/api/state") || {
+            echo "Stato vecchia versione non accessibile: arrestare Unbalanced dal gestore dopo aver concluso le operazioni"; exit 1;
+        };; esac
+        case "$state" in '{"status":0,'*) ;; *) echo "Unbalanced occupato o stato non verificabile"; exit 1;; esac
     fi
 }
-assert_idle
-[ -f "$persistent/unbalanced.cfg" ] && [ -f "$persistent/unbalanced.env" ] || {
-    echo "Configurazione esistente richiesta: questo pacchetto aggiorna il plugin installato."
-    exit 1
-}
 printf '%s  %s\n' '##sha256##' "$bundle" | sha256sum -c -
-# Keep a rollback of code. The plugin manager may already have saved the new manifest.
-backup="$persistent/rollback-$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -m 700 "$backup"
-if [ -d "$code" ]; then
-    tar --exclude='*.env' --exclude='*.cfg' -czf "$backup/code.tgz" -C /usr/local/emhttp/plugins unbalanced
-fi
-if [ -f /boot/config/plugins/unbalanced.plg ]; then
-    cp -p /boot/config/plugins/unbalanced.plg "$backup/manifest-at-install.plg"
-fi
-stage=$(mktemp -d /usr/local/emhttp/plugins/.unbalanced-new.XXXXXX)
-trap 'rm -rf "$stage"' EXIT
+# Staging and previous code stay outside emhttp/plugins (no duplicate .page).
+stage=$(mktemp -d /usr/local/emhttp/.unbalanced-update.XXXXXX)
+swapped=0
+rollback() {
+    if [ "$swapped" -eq 1 ]; then
+        "$code/scripts/stop" || true
+        mv "$code" "$stage/failed"
+        if [ -d "$stage/previous" ]; then
+            mv "$stage/previous" "$code"
+            if [ "$running" -eq 1 ]; then "$code/scripts/start" || echo "Riavvio precedente fallito: ripristino codice completato, servizio da controllare"; fi
+        fi
+        swapped=0
+        echo "Ripristinato il codice precedente"
+    fi
+}
+finish() {
+    result=$?
+    trap - EXIT
+    if [ "$result" -ne 0 ]; then rollback; fi
+    find "$stage" -depth -delete
+    exit "$result"
+}
+trap finish EXIT
 tar -xzf "$bundle" -C "$stage"
 [ -x "$stage/unbalanced/unbalanced" ] && [ -f "$stage/unbalanced/VERSION" ]
 chmod -R a+rX "$stage/unbalanced"
+if [ -f "$code/RELEASE_REVISION" ] && cmp -s "$code/RELEASE_REVISION" "$stage/unbalanced/RELEASE_REVISION"; then
+    echo "Revisione già installata; nessun backup o riavvio aggiuntivo"; exit 0
+fi
 assert_idle
-old="$code.previous-##version##"
-[ ! -e "$old" ] || { echo "Directory precedente già presente: $old"; exit 1; }
+# A boot install has no previous code; never creates empty flash backups.
+if [ -d "$code" ]; then
+    previous=$(cat "$code/VERSION")
+    case "$previous" in *[!0-9.a-zA-Z-]*|'') echo "Versione precedente non valida"; exit 1;; esac
+    backup="$persistent/backup-code-$previous.tgz"
+    if [ ! -f "$backup" ]; then
+        tar --exclude='*.env' --exclude='*.cfg' -czf "$backup" -C /usr/local/emhttp/plugins unbalanced
+    fi
+    echo "Backup codice: $backup"
+fi
+assert_idle
 if [ "$running" -eq 1 ]; then "$code/scripts/stop"; fi
-if [ -d "$code" ]; then mv "$code" "$old"; fi
-mv "$stage/unbalanced" "$code"
-# Configurations and history remain in place and are never read/copied here.
+if [ -d "$code" ]; then mv "$code" "$stage/previous"; fi
+if ! mv "$stage/unbalanced" "$code"; then
+    if [ -d "$stage/previous" ]; then mv "$stage/previous" "$code"; fi
+    if [ "$running" -eq 1 ]; then "$code/scripts/start" || true; fi
+    exit 1
+fi
+swapped=1
 if [ "$running" -eq 1 ]; then
-    "$code/scripts/start"
+    if ! "$code/scripts/start"; then echo "Avvio fallito"; exit 1; fi
     healthy=0
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
         sleep 1
-        if curl -fsS --max-time 3 http://127.0.0.1:7090/api/config | grep -q '##version##'; then healthy=1; break; fi
+        if curl -fsS --max-time 3 "$endpoint/api/health" | grep -q '"version":"##version##"'; then healthy=1; break; fi
     done
-    if [ "$healthy" -ne 1 ]; then
-        "$code/scripts/stop"
-        mv "$code" "$code.failed-##version##"
-        if [ -d "$old" ]; then mv "$old" "$code"; "$code/scripts/start"; fi
-        echo "Salute non confermata: ripristinato il codice precedente. Backup: $backup"
-        exit 1
-    fi
+    [ "$healthy" -eq 1 ] || { echo "Salute non confermata"; exit 1; }
 fi
-echo "Unbalanced ##version## installato. Backup: $backup"
+swapped=0
+# Relocate code directories left by 2026.11.01.1 without deleting their contents.
+for legacy in /usr/local/emhttp/plugins/unbalanced.previous-*; do
+    [ -d "$legacy" ] && [ -f "$legacy/VERSION" ] && [ -x "$legacy/unbalanced" ] || continue
+    archive=$(mktemp -d /usr/local/emhttp/.unbalanced-legacy.XXXXXX)
+    mv "$legacy" "$archive/previous"
+done
+# Retain only the two newest code backups generated by this installer. Legacy
+# rollback folders and user backups are never touched. Package cache likewise.
+find "$persistent" -maxdepth 1 -type f -name 'backup-code-*.tgz' -printf '%T@ %p\n' | sort -rn | tail -n +3 | cut -d' ' -f2- | while IFS= read -r old; do unlink "$old"; done
+find "$persistent" -maxdepth 1 -type f -name 'unbalanced-[0-9]*.tgz' ! -name 'unbalanced-##version##.tgz' -printf '%T@ %p\n' | sort -rn | tail -n +2 | cut -d' ' -f2- | while IFS= read -r old; do unlink "$old"; done
+echo "Unbalanced ##version## installato; configurazione e cronologia preservate"
 ]]>
 </INLINE>
 </FILE>

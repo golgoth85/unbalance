@@ -29,7 +29,7 @@ func (c *Core) runOperation(opName string) {
 	if err := validateRsyncArgs(operation.RsyncArgs); err != nil {
 		logger.Yellow("operation:rsync-args:blocked:%s", err)
 		c.publishOperationError("unable to start %s operation: %s", opName, err)
-		c.state.Status = common.OpNeutral
+		c.setStatus(common.OpNeutral)
 		c.state.Operation = nil
 		return
 	}
@@ -106,7 +106,11 @@ func (c *Core) runCommand(operation *domain.Operation, command *domain.Command) 
 		if err := syscall.Statfs(paths.DstRoot, &stat); err != nil {
 			return 0, err
 		}
-		free := stat.Bavail * uint64(stat.Bsize)
+		block := stat.Frsize
+		if block == 0 {
+			block = stat.Bsize
+		}
+		free := stat.Bavail * uint64(block)
 		reserve := common.ReservedSpace
 		for _, disk := range c.state.Unraid.Disks {
 			if disk.Path == paths.DstRoot {
@@ -173,6 +177,9 @@ func (c *Core) runCommand(operation *domain.Operation, command *domain.Command) 
 	if exitCode == 23 || exitCode == 13 {
 		err = nil
 		command.Status = common.CmdFlagged
+		if command.Estimated || command.VerifySource {
+			command.Status = common.CmdVerificationFailed
+		}
 		command.Reason = rsyncExitReason(exitCode)
 	}
 
@@ -328,7 +335,7 @@ func (c *Core) commandCompleted(operation *domain.Operation, command *domain.Com
 func (c *Core) handleItemDeletion(operation *domain.Operation, command *domain.Command) {
 	if !operation.DryRun && (operation.OpKind == common.OpScatterMove || operation.OpKind == common.OpGatherMove) {
 		// the command was flagged due to an error, don't delete the source file/folder in these cases
-		if command.Status == common.CmdFlagged {
+		if command.Status == common.CmdFlagged || command.Status == common.CmdVerificationFailed {
 			msg := fmt.Sprintf("skipping:deletion:(rsync command was flagged):(%s)", filepath.Join(command.Dst, command.Entry))
 			operation.Line = msg
 
@@ -339,9 +346,16 @@ func (c *Core) handleItemDeletion(operation *domain.Operation, command *domain.C
 			return
 		}
 
-		if command.Estimated {
+		if command.Estimated || command.VerifySource {
+			if err := c.scatterCopyConflict(command); err != nil {
+				command.Status = common.CmdVerificationFailed
+				command.Reason = err.Error()
+				operation.Line = err.Error()
+				c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventTransferProgress, Payload: operation}, "socket:broadcast")
+				return
+			}
 			if err := verifyResumeDestination(c.currentComparisonContext(), "/usr/bin/rsync", command); err != nil {
-				command.Status = common.CmdFlagged
+				command.Status = common.CmdVerificationFailed
 				command.Reason = err.Error()
 				operation.Line = err.Error()
 				c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventTransferProgress, Payload: operation}, "socket:broadcast")
@@ -399,7 +413,7 @@ func (c *Core) endOperation(subject, headline string, commands []string, operati
 	elapsed := lib.Round(operation.Finished.Sub(operation.Started), time.Millisecond)
 
 	c.clearPlanContext()
-	c.state.Status = common.OpNeutral
+	c.setStatus(common.OpNeutral)
 	c.state.Operation = nil
 	c.state.Unraid = c.refreshUnraid()
 	// TODO: update history
@@ -447,7 +461,7 @@ func (c *Core) removeSourceByID(operationID, commandID string) {
 		return
 	}
 
-	c.state.Status = operation.OpKind
+	c.setStatus(operation.OpKind)
 	c.state.Operation = &operation
 	c.state.Unraid = c.refreshUnraid()
 
@@ -501,7 +515,7 @@ func (c *Core) performRemoveSource(operation *domain.Operation, cmd *domain.Comm
 		}
 
 		c.clearPlanContext()
-		c.state.Status = common.OpNeutral
+		c.setStatus(common.OpNeutral)
 		c.state.Operation = nil
 
 		break
@@ -516,7 +530,7 @@ func (c *Core) replay(operationID string) {
 		return
 	}
 
-	c.state.Status = operation.OpKind
+	c.setStatus(operation.OpKind)
 	c.state.Operation = c.createReplayOperation(operation)
 	c.state.Unraid = c.refreshUnraid()
 

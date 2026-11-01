@@ -4,20 +4,24 @@ Fork personale di `jbrodriguez/unbalance`, mantenuto su `golgoth85/unbalance`.
 La pianificazione Scatter confronta sorgente e destinazione con rsync e riserva
 solo lo spazio richiesto dai file mancanti/modificati, più un margine. I file
 modificati vengono stimati per intero, per coprire i temporanei di rsync.
-Le cartelle già complete restano nel piano. La stima non è un conteggio dei byte
+Le cartelle già complete restano nel piano. Ogni cartella viene confrontata su tutte le destinazioni e assegnata a quella capiente con meno dati da trasferire. La stima comprende allocazione della sorgente per voci mancanti e xattr differenti con -X. La stima non è un conteggio dei byte
 fisicamente scritti; il dashboard indica dati previsti elaborati o simulati.
 
-MOVE dei nuovi piani verifica la destinazione con checksum, senza filtri utente,
+MOVE dei nuovi piani Scatter e Gather verifica la destinazione con checksum, senza filtri utente,
 prima di cancellare gli originali. Errori e differenze preservano la sorgente;
 STOP interrompe anche i confronti e la verifica. I piani devono essere rigenerati
 se cambiano le opzioni rsync. Non scrivere sui file coinvolti durante il trasferimento.
 L'interfaccia web e la pagina impostazioni Unraid si adattano a telefono e tablet.
 
 I pacchetti del fork si trovano nelle [release](https://github.com/golgoth85/unbalance/releases).
-L'installer aggiorna un'installazione esistente sulla porta 7090, preserva
+L'installer aggiorna un'installazione esistente sulla porta configurata, preserva
 configurazione e cronologia, verifica l'inattività, salva il codice precedente e
 ripristina il codice se non supera il controllo HTTP. Non installare mentre
 rsync o Unbalanced stanno lavorando. Non cambiano dati utente o schema.
+Le sorgenti Scatter non vengono cancellate se la stessa cartella esiste su altri dischi. Con filtri, --chmod o copia senza -X, differenze di metadati possono preservare le sorgenti: non sono autorizzazioni a rimuoverle manualmente. Lo stato di verifica fallita non è offerto a Remove source dalla vecchia UI dopo un rollback.
+Il controllo COPY ordinario usa dimensione/data; per confrontare il contenuto usare Validate checksum. Il rollback verso una versione precedente non aggiunge verifiche ai suoi comandi storici.
+Per il primo aggiornamento da una release legacy con autenticazione attiva occorre arrestare il plugin dal suo gestore dopo aver concluso le operazioni: senza endpoint di salute pubblico non è possibile accertarne l'inattività senza credenziali. Gli aggiornamenti successivi usano /api/health.
+I backup di codice del nuovo installer sono limitati agli ultimi due; conserva separatamente eventuali rollback da mantenere più a lungo. Le directory rollback-* delle vecchie release non vengono eliminate automaticamente. Reinstallazioni identiche e avvii del NAS non producono backup aggiuntivi.
 I vecchi record di cronologia mantengono il comportamento della versione che li ha generati.
 
 Per sviluppo e verifiche consultare `AGENTS.md`; lo stato è in `ROADMAP.md`.

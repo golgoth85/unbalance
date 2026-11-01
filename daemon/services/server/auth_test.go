@@ -1,10 +1,13 @@
 package server
 
 import (
+	"encoding/json"
+	"github.com/cskr/pubsub"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+	"unbalance/daemon/services/core"
 
 	"github.com/labstack/echo/v4"
 
@@ -161,5 +164,24 @@ func TestRequestExternalProtoNormalizesWebsocketSchemes(t *testing.T) {
 				t.Fatalf("requestExternalProto() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPublicHealthContainsOnlyStatusAndVersion(t *testing.T) {
+	ctx := &domain.Context{Hub: pubsub.New(10), Config: domain.Config{Version: "test", AuthEnabled: true, AuthPassword: "not-to-expose"}}
+	s := &Server{ctx: ctx, core: core.Create(ctx)}
+	e := echo.New()
+	e.GET("/api/health", s.health)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatal(rec.Code)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 2 || result["version"] != "test" || result["status"] != float64(0) {
+		t.Fatal(result)
 	}
 }

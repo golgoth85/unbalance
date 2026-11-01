@@ -12,7 +12,8 @@ const disks = ['disk3','disk4','disk5'].map((name,i)=>({id:i,name,path:'/mnt/'+n
 const item={name:long,path:'Libri/'+long,location:'/mnt/disk4',size:3355000000000,transferSize:646000000000,requiredSpace:647000000000,estimated:true,blocksUsed:0};
 const plan={id:'test-plan',started:now,ended:now,chosenFolders:['Libri'],ownerIssue:0,groupIssue:0,folderIssue:0,fileIssue:0,bytesToTransfer:item.transferSize,rsyncArgs:['-X'],vdisks:Object.fromEntries(disks.map(d=>[d.path,{path:d.path,currentFree:d.free,plannedFree:d.free-(d.name==='disk3'?item.requiredSpace:0),src:d.name==='disk4',dst:d.name==='disk3',bin:d.name==='disk3'?{size:item.transferSize,requiredSpace:item.requiredSpace,blocksUsed:0,items:[item]}:null}]))};
 const operation={id:'test-copy',opKind:3,started:now,finished:now,bytesToTransfer:646e9,bytesTransferred:0,dryRun:true,rsyncArgs:['-avPR','-X','--dry-run'],rsyncStrArgs:'-avPR -X --dry-run',commands:[{id:'cmd',src:'/mnt/disk4',dst:'/mnt/disk3',entry:item.path,size:0,transferred:0,status:0,reason:''}],completed:0,speed:0,remaining:'0s',deltaTransfer:0,line:'Confronto '+long};
-const state={status:0,unraid:{numDisks:3,numProtected:3,synced:now,syncErrs:0,resync:0,resyncPos:0,state:'STARTED',size:48e12,free:3.6e12,disks,blockSize:4096},operation:null,history:{version:1,lastChecked:now,items:{[operation.id]:operation},order:[operation.id]}};
+const failed={...operation,id:'failed-move',opKind:2,dryRun:false,commands:[{...operation.commands[0],status:6,estimated:true,reason:'Verifica fallita: sorgente preservata'}]};
+const state={status:0,unraid:{numDisks:3,numProtected:3,synced:now,syncErrs:0,resync:0,resyncPos:0,state:'STARTED',size:48e12,free:3.6e12,disks,blockSize:4096},operation:null,history:{version:1,lastChecked:now,items:{[failed.id]:failed,[operation.id]:operation},order:[failed.id,operation.id]}};
 const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransfer:0,reservedAmount:1,reservedUnit:'Gb',rsyncArgs:['-X'],verbosity:0,refreshRate:1000,logLines:100,speedWindow:'90s',authEnabled:false,authUsername:'admin'};
 (async()=>{
  const browser=await chromium.launch({headless:true});
@@ -58,7 +59,8 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   await page.goto(base);await page.getByText('Source Disk',{exact:true}).waitFor();
   await page.getByRole('button').filter({hasText:'disk4'}).click();
   await page.getByRole('button',{name:'Seleziona Libri',exact:true}).click();
-  await page.getByRole('checkbox',{name:'Destinazione disk3'}).click();
+  const destination=page.getByRole('checkbox',{name:'Destinazione disk3'});
+  if(mobile) await destination.tap(); else await destination.click();
   await capture('select');
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('button',{name:'Next',exact:true}).click();
@@ -73,6 +75,10 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   assert(!(await page.locator('body').innerText()).includes('NaN'),'NaN in UI');
   // A new page resets the synthetic busy state; history actions remain guarded.
   await page.goto(base);await page.getByText('HISTORY',{exact:true}).click();
+  await page.getByRole('button').filter({hasText:'Scatter / Move'}).click();
+  await page.getByText('Sorgente preservata: verifica non superata.',{exact:false}).waitFor();
+  assert.equal(await page.getByText('rmsrc',{exact:true}).count(),0,'verifica fallita non deve offrire rimozione sorgente');
+  await capture('protected-source');
   const row=page.getByRole('button').filter({hasText:'Scatter / Copy'});
   await row.focus();await page.keyboard.press('Enter');
   assert(await row.getAttribute('aria-pressed')==='true');
@@ -88,10 +94,13 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   await capture('logs');
   await page.keyboard.press('Tab');
   assert(await page.evaluate(()=>document.activeElement!==document.body),'focus tastiera mancante');
-  const css=fs.readFileSync('meta/plugin/unbalanced.page','utf8').match(/<style>([\s\S]*?)<\/style>/)[1];
-  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px system-ui;margin:16px}input,select{padding:8px}${css}</style><form><div class="unbalanced-settings-panel"><label class="label" for="port">Porta</label><div class="field"><input id="port" value="7090"></div><label class="label" for="auth">Autenticazione</label><div class="field"><select id="auth"><option>Attiva</option></select></div><div class="help-text">Impostazioni sintetiche senza collegamenti a servizi reali</div><div class="info-block">Informazioni del plugin</div></div><div class="unbalanced-settings-actions"><button type="button">Applica</button><button type="button">Ripristina</button></div></form>`);
+  // Markup reale; rimossi soltanto PHP e script dipendenti dalla UI Unraid.
+  const native=fs.readFileSync('meta/plugin/unbalanced.page','utf8').split('---')[1]
+    .replace(/<\?php[\s\S]*?\?>/g,'').replace(/<\?=[\s\S]*?\?>/g,'')
+    .replace(/<script[\s\S]*?<\/script>/g,'').replace(/on(?:Click|Change)="[^"]*"/gi,'');
+  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px system-ui;margin:16px}input,select{padding:8px}</style>${native}`);
   await capture('unraid-template');
-  results.push({name,width,height,isMobile:mobile,screenshots:8,errors,commands:commands.map(c=>c.topic)});
+  results.push({name,width,height,isMobile:mobile,screenshots:9,errors,commands:commands.map(c=>c.topic)});
   await context.close();
   assert.equal(errors.length,0,JSON.stringify(errors));
  }

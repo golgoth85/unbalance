@@ -44,7 +44,7 @@ func (c *Core) gatherPlanPrepare(setup domain.GatherSetup) {
 		}
 	}
 
-	c.state.Status = common.OpGatherPlan
+	c.setStatus(common.OpGatherPlan)
 	c.state.Unraid = unraid
 
 	// make sure a previous stop request doesn't cancel this plan
@@ -136,7 +136,7 @@ func (c *Core) gatherPlanStart(ctx context.Context, plan *domain.Plan) {
 }
 
 func (c *Core) gatherPlanEnd(plan *domain.Plan) {
-	c.state.Status = common.OpNeutral
+	c.setStatus(common.OpNeutral)
 	c.clearPlanContext()
 
 	planView, err := c.storePendingPlan(planFlowGather, plan)
@@ -178,7 +178,7 @@ func (c *Core) gatherMove(planID, target string) {
 	}
 	plan.Target = target
 
-	c.state.Status = common.OpGatherMove
+	c.setStatus(common.OpGatherMove)
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createGatherOperation(plan)
 
@@ -232,12 +232,13 @@ func (c *Core) createGatherOperation(plan domain.Plan) *domain.Operation {
 			}
 
 			operation.Commands = append(operation.Commands, &domain.Command{
-				ID:     shortid.MustGenerate(),
-				Src:    item.Location,
-				Dst:    vdisk.Path + string(filepath.Separator),
-				Entry:  entry,
-				Size:   item.Size,
-				Status: common.CmdPending,
+				VerifySource: true,
+				ID:           shortid.MustGenerate(),
+				Src:          item.Location,
+				Dst:          vdisk.Path + string(filepath.Separator),
+				Entry:        entry,
+				Size:         item.Size,
+				Status:       common.CmdPending,
 			})
 		}
 	}

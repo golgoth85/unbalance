@@ -25,6 +25,7 @@ func TestValidateRsyncArgsAllowsCommonLocalOptions(t *testing.T) {
 
 func TestValidateRsyncArgsBlocksDangerousOptions(t *testing.T) {
 	tests := [][]string{
+		{"--del"},
 		{"--delete"},
 		{"--delete-before"},
 		{"--delete-after"},

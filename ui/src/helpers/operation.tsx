@@ -35,6 +35,7 @@ export const getCommandStatus = (status: CommandStatus): React.ReactNode => {
           style="fill-yellow-600 dark:fill-yellow-600"
         />
       );
+    case CommandStatus.VerificationFailed:
     case CommandStatus.Stopped:
       return (
         <Icon

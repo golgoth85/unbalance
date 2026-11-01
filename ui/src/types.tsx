@@ -72,6 +72,7 @@ export enum CommandStatus {
   Stopped = 3,
   SourceRemoval = 4,
   InProgress = 5,
+  VerificationFailed = 6,
 }
 
 export interface Command {

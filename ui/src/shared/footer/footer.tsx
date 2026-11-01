@@ -18,7 +18,7 @@ export const Footer: React.FunctionComponent = () => {
         <a
           href="https://jbrio.net/"
           target="_blank"
-          title="jbrio.net"
+          aria-label="Sito dello sviluppatore" title="jbrio.net"
           className="text-lime-500 break-words"
         >
           Juan B. Rodriguez
@@ -31,7 +31,7 @@ export const Footer: React.FunctionComponent = () => {
       <div className="flex flex-wrap gap-y-2 items-center">
         <a
           href="https://jbrio.net/unbalanced"
-          title="Support Fund"
+          aria-label="Support Fund" title="Support Fund"
           rel="noreferrer noopener"
           target="_blank"
         >
@@ -40,7 +40,7 @@ export const Footer: React.FunctionComponent = () => {
 
         <a
           href="https://x.com/jbrodriguezio"
-          title="@jbrodriguezio"
+          aria-label="Profilo X" title="@jbrodriguezio"
           rel="noreferrer noopener"
           target="_blank"
           className="ml-2"
@@ -50,7 +50,7 @@ export const Footer: React.FunctionComponent = () => {
 
         <a
           href="https://github.com/jbrodriguez"
-          title="github.com/jbrodriguez"
+          aria-label="Profilo GitHub" title="github.com/jbrodriguez"
           rel="noreferrer noopener"
           target="_blank"
           className="ml-2"
@@ -60,7 +60,7 @@ export const Footer: React.FunctionComponent = () => {
 
         <a
           href="https://forums.unraid.net/topic/34547-diskmv-a-set-of-utilities-to-move-files-between-disks/"
-          title="diskmv"
+          aria-label="diskmv" title="diskmv"
           rel="noreferrer noopener"
           target="_blank"
         >
@@ -70,7 +70,7 @@ export const Footer: React.FunctionComponent = () => {
         <a
           className="ml-2"
           href="https://unraid.net/"
-          title="unraid.net"
+          aria-label="Unraid" title="unraid.net"
           rel="noreferrer noopener"
           target="_blank"
         >
@@ -80,7 +80,7 @@ export const Footer: React.FunctionComponent = () => {
         <a
           className="ml-3"
           href="https://jbrio.net/"
-          title="jbrio.net"
+          aria-label="Sito dello sviluppatore" title="jbrio.net"
           rel="noreferrer noopener"
           target="_blank"
         >

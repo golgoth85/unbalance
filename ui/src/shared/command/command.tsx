@@ -52,6 +52,7 @@ export const Command: React.FunctionComponent<Props> = ({
           ></div>
         </div>
       </div>
+      {command.status === CommandStatus.VerificationFailed && <div className="lg:col-span-12 text-amber-500">Sorgente preservata: verifica non superata. Correggere la copia e ripetere il trasferimento.</div>}
       {command.reason && (
         <div className="lg:col-span-12 break-all text-xs text-yellow-600 dark:text-yellow-600">
           {command.reason}

@@ -23,7 +23,7 @@ func validateRsyncArgs(args []string) error {
 			continue
 		}
 
-		if arg == "--delete" || strings.HasPrefix(arg, "--delete-") {
+		if arg == "--del" || arg == "--delete" || strings.HasPrefix(arg, "--delete-") {
 			return fmt.Errorf("rsync option %q is not allowed because unbalanced does not perform destination mirroring/deletion", arg)
 		}
 
