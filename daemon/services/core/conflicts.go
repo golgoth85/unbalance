@@ -66,6 +66,12 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 				if err != nil {
 					return err
 				}
+				if equal && !info.IsDir() {
+					equal, err = sameSourceXattrs(ctx, earlier.path, current.path)
+					if err != nil {
+						return err
+					}
+				}
 				if !equal {
 					return fmt.Errorf("Conflitto GATHER tra sorgenti: %s; sorgente in conflitto preservata", command.Entry)
 				}
@@ -82,6 +88,15 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 			equal, err := sameEntryContent(ctx, current, checkedEntry{target, other})
 			if err != nil {
 				return err
+			}
+			if equal && !info.IsDir() {
+				// Existing attributes may be overwritten/deleted by -X. Adding
+				// attributes missing on the destination is a safe repair.
+				space, e := changedXattrSpace(target, path)
+				if e != nil {
+					return e
+				}
+				equal = space == 0
 			}
 			if !equal {
 				return fmt.Errorf("Conflitto GATHER con destinazione: %s; sorgente in conflitto preservata", command.Entry)
@@ -259,4 +274,22 @@ func runTransferBatch(ctx context.Context, operation *domain.Operation, execute 
 		}
 	}
 	return nil, nil
+}
+
+func sameSourceXattrs(ctx context.Context, a, b string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	first, err := changedXattrSpace(a, b)
+	if err != nil {
+		return false, err
+	}
+	if first != 0 {
+		return false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	second, err := changedXattrSpace(b, a)
+	return second == 0, err
 }
