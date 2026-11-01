@@ -3,11 +3,14 @@ package core
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"unbalance/daemon/common"
 	"unbalance/daemon/domain"
@@ -35,7 +38,7 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 		if err = validateCreatablePathBoundary(paths.DstRoot, paths.DstPath); err != nil {
 			return err
 		}
-		err = filepath.WalkDir(paths.SrcPath, func(path string, entry os.DirEntry, err error) error {
+		inspect := func(path string, entry os.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
@@ -66,7 +69,7 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 				if err != nil {
 					return err
 				}
-				if equal && !info.IsDir() {
+				if equal {
 					equal, err = sameSourceXattrs(ctx, earlier.path, current.path)
 					if err != nil {
 						return err
@@ -89,7 +92,7 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 			if err != nil {
 				return err
 			}
-			if equal && !info.IsDir() {
+			if equal {
 				// Existing attributes may be overwritten/deleted by -X. Adding
 				// attributes missing on the destination is a safe repair.
 				space, e := changedXattrSpace(target, path)
@@ -102,7 +105,23 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 				return fmt.Errorf("Conflitto GATHER con destinazione: %s; sorgente in conflitto preservata", command.Entry)
 			}
 			return nil
-		})
+		}
+		// -R also transfers attributes of the implied parent directories.
+		// Inspect them before walking the selected subtree, excluding disk root.
+		ancestors := []string{}
+		for parent := filepath.Dir(paths.SrcPath); parent != paths.SrcRoot && pathIsInside(paths.SrcRoot, parent); parent = filepath.Dir(parent) {
+			ancestors = append(ancestors, parent)
+		}
+		for i := len(ancestors) - 1; i >= 0; i-- {
+			info, e := os.Lstat(ancestors[i])
+			if e != nil {
+				return e
+			}
+			if e = inspect(ancestors[i], fs.FileInfoToDirEntry(info), nil); e != nil {
+				return e
+			}
+		}
+		err = filepath.WalkDir(paths.SrcPath, inspect)
 		if err != nil {
 			return err
 		}
@@ -201,50 +220,54 @@ func transferHasOverlap(ctx context.Context, src, other string) (bool, error) {
 func comparisonFlags(flags []string) []string {
 	out := []string{}
 	takesNext := false
-	const withArgument = "fTBMe@" // conservative: never rewrite value-bearing groups
-	for _, f := range flags {
+	// Unknown arity is preserved conservatively, never guessed as a switch.
+	switches := map[string]bool{}
+	for _, name := range strings.Fields("archive recursive relative no-relative implied-dirs no-implied-dirs links copy-links copy-unsafe-links safe-links munge-links copy-dirlinks keep-dirlinks hard-links perms no-perms executability acls xattrs owner group devices specials times omit-dir-times omit-link-times super fake-super sparse preallocate dry-run whole-file checksum one-file-system existing ignore-existing ignore-non-existing update append append-verify inplace partial delay-updates prune-empty-dirs compress compress-old compress-new ipv4 ipv6 numeric-ids human-readable no-human-readable itemize-changes stats progress verbose no-whole-file ignore-times ignore-errors blocking-io no-blocking-io") {
+		switches["--"+name] = true
+	}
+
+	const shortArguments = "fTBMe@"
+	const shortSwitches = "avPRrlptgoDHAisincWSumLkKOJEUNdbzxhICF046X"
+	for _, arg := range flags {
 		if takesNext {
-			out = append(out, f)
+			out = append(out, arg)
 			takesNext = false
 			continue
 		}
-		if f == "--quiet" || f == "--msgs2stderr" || f == "--no-msgs2stderr" {
+		if arg == "--quiet" || arg == "--msgs2stderr" || arg == "--no-msgs2stderr" {
 			continue
 		}
-		if f == "-q" {
+		if strings.HasPrefix(arg, "--") {
+			out = append(out, arg)
+			takesNext = !strings.Contains(arg, "=") && !switches[arg]
 			continue
 		}
-		if strings.HasPrefix(f, "--") {
-			out = append(out, f)
-			// Preserve standalone values of the options supported by this UI.
-			switch f {
-			case "--filter", "--include", "--exclude", "--include-from", "--exclude-from", "--files-from", "--temp-dir", "--block-size", "--remote-option", "--out-format", "--log-file-format", "--info", "--debug", "--chmod", "--bwlimit", "--max-size", "--min-size":
-				takesNext = true
-			}
-			continue
-		}
-		if strings.HasPrefix(f, "-") {
-			group := f[1:]
-			letters := len(group) > 0
-			argumentAt := -1
-			for i, r := range group {
-				if r < 'A' || r > 'Z' && r < 'a' || r > 'z' {
-					letters = false
-				}
-				if argumentAt < 0 && strings.ContainsRune(withArgument, r) {
-					argumentAt = i
-				}
-			}
-			if argumentAt >= 0 {
-				takesNext = argumentAt == len(group)-1
-			} else if letters {
-				f = "-" + strings.ReplaceAll(group, "q", "")
-				if f == "-" {
+		if strings.HasPrefix(arg, "-") && arg != "-" {
+			group := arg[1:]
+			var cleaned strings.Builder
+			for i := 0; i < len(group); i++ {
+				option := group[i]
+				if option == 'q' {
 					continue
 				}
+				cleaned.WriteByte(option)
+				if strings.ContainsRune(shortArguments, rune(option)) {
+					cleaned.WriteString(group[i+1:])
+					takesNext = i == len(group)-1
+					break
+				}
+				if !strings.ContainsRune(shortSwitches, rune(option)) {
+					cleaned.WriteString(group[i+1:])
+					takesNext = i == len(group)-1
+					break
+				}
 			}
+			if cleaned.Len() > 0 {
+				out = append(out, "-"+cleaned.String())
+			}
+			continue
 		}
-		out = append(out, f)
+		out = append(out, arg)
 	}
 	return out
 }
@@ -292,4 +315,19 @@ func sameSourceXattrs(ctx context.Context, a, b string) (bool, error) {
 	}
 	second, err := changedXattrSpace(b, a)
 	return second == 0, err
+}
+
+func recordPreflightFailure(ctx context.Context, operation *domain.Operation, err error) bool {
+	stopped := ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+	status := common.CmdVerificationFailed
+	if stopped {
+		status = common.CmdStopped
+	}
+	for _, command := range operation.Commands {
+		command.Status = status
+		command.Reason = err.Error()
+	}
+	operation.Finished = time.Now()
+	operation.Line = err.Error()
+	return stopped
 }

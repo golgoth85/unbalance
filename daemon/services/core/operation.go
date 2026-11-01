@@ -82,14 +82,14 @@ func (c *Core) runOperation(opName string) {
 	})
 	if err != nil {
 		if failed == nil {
-			for _, command := range operation.Commands {
-				command.Status = common.CmdVerificationFailed
-				command.Reason = err.Error()
+			stopped := recordPreflightFailure(c.currentComparisonContext(), operation, err)
+			headline := "Controllo preliminare fallito: sorgenti preservate"
+			if stopped {
+				headline = "Operazione interrotta prima del trasferimento: sorgenti preservate"
+			} else {
+				c.publishOperationError("%s", err)
 			}
-			c.publishOperationError("%s", err)
-			operation.Finished = time.Now()
-			operation.Line = err.Error()
-			c.endOperation("Operazione interrotta", "Controllo preliminare fallito: sorgenti preservate", commandsExecuted, operation)
+			c.endOperation("Operazione interrotta", headline, commandsExecuted, operation)
 		} else {
 			currentLine = fmt.Sprintf(`rsync %s %s %s`, operation.RsyncStrArgs, strconv.Quote(failed.Entry), strconv.Quote(failed.Dst))
 			failed.Status = common.CmdVerificationFailed

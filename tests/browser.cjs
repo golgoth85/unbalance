@@ -43,6 +43,9 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
    if(packet.topic==='scatter:plan:start'){
     ws.send(JSON.stringify({topic:'scatter:plan:started',payload:'Pianificazione sintetica'}));
     ws.send(JSON.stringify({topic:'scatter:plan:ended',payload:plan}));
+   }else if(packet.topic==='gather:plan:start'){
+    ws.send(JSON.stringify({topic:'gather:plan:started',payload:'Pianificazione GATHER sintetica'}));
+    ws.send(JSON.stringify({topic:'gather:plan:ended',payload:plan}));
    }else if(packet.topic==='scatter:copy'){
     ws.send(JSON.stringify({topic:'transfer:started',payload:operation}));
    }else throw Error('Comando inatteso nel test: '+packet.topic);
@@ -68,6 +71,9 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   await page.getByText('Dati da trasferire:',{exact:false}).waitFor();
   await page.getByRole('button').filter({hasText:'disk3'}).click();
   await page.getByText('da trasferire)',{exact:false}).waitFor();
+  await page.getByText('Verifiche, metadati e conflitti',{exact:true}).focus();
+  await page.keyboard.press('Enter');
+  await page.getByText('Nei duplicati identici per contenuto e xattr, GATHER conserva',{exact:false}).waitFor();
   await capture('validation');
   assert(await page.getByRole('checkbox').isChecked(),'dry run deve restare attivo nel test');
   await page.getByRole('button',{name:'COPY',exact:true}).click();
@@ -87,6 +93,13 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   await page.getByText('GATHER',{exact:true}).click();
   await page.getByRole('button',{name:'Seleziona Libri',exact:true}).click();
   await capture('gather');
+  await page.getByRole('button',{name:'Next',exact:true}).click();
+  await page.getByRole('button',{name:'Next',exact:true}).click();
+  const policy=page.getByText('Metadati del consolidamento',{exact:true});
+  if(mobile) await policy.tap(); else await policy.click();
+  await page.getByRole('button').filter({hasText:'disk3'}).click();
+  await page.getByRole('button',{name:'MOVE',exact:true}).waitFor();
+  await capture('gather-targets');
   await page.getByText('SETTINGS',{exact:true}).click();
   await page.getByRole('link',{name:'Rsync Flags',exact:true}).click();
   await capture('settings');
@@ -108,7 +121,7 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
     const size=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth);probe.remove();return size;
   },width);
   assert(overflow>width+1,'controllo negativo dello scroll non rilevato');
-  results.push({name,width,height,isMobile:mobile,screenshots:9,errors,measurements,commands:commands.map(c=>c.topic)});
+  results.push({name,width,height,isMobile:mobile,screenshots:10,errors,measurements,commands:commands.map(c=>c.topic)});
   await context.close();
   assert.equal(errors.length,0,JSON.stringify(errors));
  }

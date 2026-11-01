@@ -47,12 +47,18 @@ bundle="$persistent/unbalanced-##version##.tgz"
     echo "Configurazione esistente richiesta"; exit 1;
 }
 # Read only PORT, never source/evaluate the configuration or print credentials.
-port_lines=$(sed -nE '/^[[:space:]]*PORT[[:space:]]*=/p' "$persistent/unbalanced.cfg")
+port_lines=$(sed -nE '/^[[:space:]]*(export[[:space:]]+)?PORT[[:space:]]*=/p' "$persistent/unbalanced.cfg")
 if [ -z "$port_lines" ]; then
     echo "PORT assente: uso il valore predefinito 7090"
     port=7090
 else
-    port=$(printf '%s\n' "$port_lines" | sed -nE "s/^[[:space:]]*PORT[[:space:]]*=[[:space:]]*['\"]?([0-9]+)['\"]?[[:space:]]*(#.*)?$/\\1/p")
+    [ "$(printf '%s\n' "$port_lines" | wc -l)" -eq 1 ] || { echo "PORT duplicata: installazione sospesa"; exit 1; }
+    # Accept only assignments that scripts/start can source as a numeric value.
+    # Spaces around '=' and comments attached to the value are not Bash assignments.
+    port=$(printf '%s\n' "$port_lines" | sed -nE \
+        -e 's/^[[:space:]]*PORT="([0-9]+)"([[:space:]]+#.*|[[:space:]]*)$/\1/p' \
+        -e "s/^[[:space:]]*PORT='([0-9]+)'([[:space:]]+#.*|[[:space:]]*)$/\\1/p" \
+        -e 's/^[[:space:]]*PORT=([0-9]+)([[:space:]]+#.*|[[:space:]]*)$/\1/p')
 fi
 case "$port" in *[!0-9]*|'') echo "Porta non valida o duplicata: installazione sospesa"; exit 1;; esac
 [ "$port" -gt 0 ] && [ "$port" -le 65535 ] || exit 1

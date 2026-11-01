@@ -72,19 +72,19 @@ export const Target: React.FunctionComponent = () => {
             onClick={onDiskClick(disk)}
             selected={disk.path === target}
           >
-            <div className="grid grid-cols-12 gap-1 items-center">
-              <div className="col-span-2 flex flex-row items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-center min-w-0">
+              <div className="lg:col-span-2 flex flex-row items-center">
                 <Icon name="star" size={20} style={fill} />
                 <span className="pr-2" />
                 <span className="text-slate-500 dark:text-gray-500">
                   {humanBytes(disk.free - plan.vdisks[disk.path].plannedFree)}
                 </span>
               </div>
-              <div className="col-span-5 flex flex-row items-center">
+              <div className="lg:col-span-5 min-w-0 flex flex-row items-center">
                 <Disk disk={disk} />
                 <div className="pr-2" />
               </div>
-              <div className="col-span-5">
+              <div className="lg:col-span-5 min-w-0">
                 <FreePanel
                   size={disk.size}
                   currentFree={plan.vdisks[disk.path].currentFree}
