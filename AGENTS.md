@@ -4,7 +4,7 @@ Fork personale di `jbrodriguez/unbalance`. Branch applicativo: `main`; sviluppo 
 
 ## Funzionamento e comandi
 
-Plugin Unraid in Go con interfaccia React/Tailwind incorporata nel binario. `go test ./...`, `go vet ./...`; in `ui`: `npm ci`, `npm run build`. Go richiesto da `go.mod`. Per il browser usare `~/.local/bin/ui-node`, mai servizi o dati reali per le prove.
+Plugin Unraid in Go con interfaccia React/Tailwind incorporata nel binario. `go test ./...`, `go vet ./...`; in `ui`: `npm ci --include=dev`, `npm run build`. Go richiesto da `go.mod`. Per il browser usare `~/.local/bin/ui-node`, mai servizi o dati reali per le prove.
 
 Fixture, toolchain, cache Go/npm, binari di prova e screenshot in `/temp/unbalance/<task>` dopo verifica mount e `system.LOCATION`, mai su disk2. Dati sintetici; pulizia al termine. Le dipendenze del frontend restano nel normale `node_modules` ignorato da Git.
 
@@ -21,3 +21,5 @@ Interfaccia e pagina impostazioni Unraid: browser reale alle tre dimensioni pres
 Per aggiornare una versione legacy con autenticazione attiva e senza `/api/health`, concludere le operazioni e arrestare il plugin dal suo gestore: il solo `/api/auth/status` non prova l'inattività. Non disattivare l'autenticazione né leggere password/hash per aggirare il controllo. L'installer legge solo il campo PORT, non esegue la configurazione.
 
 GATHER: controllare i conflitti fra tutte le sorgenti e con la destinazione prima di qualsiasi copia/rimozione, e ricontrollare la destinazione prima di ogni comando. I confronti devono preservare esattamente gli argomenti dei filtri. Inizializzare STOP/contesto durante l'ammissione sincrona, prima del worker. Staging installer in `/usr/local/lib/unbalanced-runtime`, fuori dalla radice web. Il backend legacy dopo rollback non acquisisce protezioni nuove: non usare API di rimozione sui comandi non verificati.
+
+Xattr GATHER: proteggere file, cartelle e genitori impliciti trasferiti da -R, sia contro altre sorgenti sia contro la destinazione. Nessuna esclusione automatica per attributi volatili. Mtime/permessi/proprietario dei duplicati identici seguono l'ultima sorgente rsync: documentare questa scelta. STOP nel preflight va registrato come interrotto, non come verifica fallita.

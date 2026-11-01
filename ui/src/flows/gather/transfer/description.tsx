@@ -1,16 +1,10 @@
 import React from 'react';
+import { GatherPolicy } from '~/shared/gather-policy/gather-policy';
 
-export const Description: React.FunctionComponent = () => {
-  return (
-    <span>
-      Select <span className="font-bold">ONE</span> target disk where the
-      shares/folders on the left will be gathered, then click on{' '}
-      <span className="font-bold">MOVE</span>
-      <br />
-      <span className="font-bold">*NOTE</span>: Drives are ordered by the least
-      amount of data transfer. A star next to a disk means that one or more
-      source folders are present. Some folders may not be picked up due to free
-      space constraints.
-    </span>
-  );
-};
+export const Description: React.FunctionComponent = () => <div className="space-y-2">
+  <p>Seleziona un disco di destinazione e poi MOVE. I dischi sono ordinati per dati da trasferire; la stella indica cartelle già presenti. Il preflight blocca i conflitti prima della copia.</p>
+  <details>
+    <summary className="cursor-pointer min-h-11 flex items-center font-medium">Metadati del consolidamento</summary>
+    <GatherPolicy />
+  </details>
+</div>;

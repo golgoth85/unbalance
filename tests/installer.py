@@ -8,11 +8,11 @@ import tarfile
 import tempfile
 import unittest
 ROOT = Path(__file__).resolve().parents[1]
-VERSION='2026.11.01.4'
+VERSION='2026.11.01.5'
 
 class InstallerTests(unittest.TestCase):
  def run_case(self,busy=False,running=True,state='neutral',healthy=True,start_fails=False,port=7090,legacy_auth=False,boot=False,reinstall=False,legacy_folder=False,seed_backups=False,unrelated=False,port_text=None,invalid_port=False):
-  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/second-review-fixes') as tmp:
+  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/third-review-fixes') as tmp:
    root=Path(tmp);emhttp=root/'emhttp';plugins=emhttp/'plugins';bootdir=root/'boot';code=plugins/'unbalanced';persistent=bootdir/'unbalanced'
    (code/'scripts').mkdir(parents=True);persistent.mkdir(parents=True)
    (persistent/'unbalanced.cfg').write_text(port_text if port_text is not None else f'PORT="{port}"\n')
@@ -87,9 +87,15 @@ class InstallerTests(unittest.TestCase):
  def test_same_revision_reinstall(self):self.run_case(reinstall=True)
  def test_moves_legacy_page_outside_plugins(self):self.run_case(legacy_folder=True)
  def test_generated_backup_and_package_retention(self):self.run_case(seed_backups=True)
- def test_port_spaces_and_comment(self):self.run_case(port=9876,port_text='  PORT = "9876" # commento sintetico\n')
+ def test_port_spaces_and_comment(self):self.run_case(port=9876,port_text='  PORT="9876" # commento sintetico\n')
  def test_unrelated_rsync_does_not_block(self):self.run_case(busy=True,unrelated=True)
  def test_rsync_during_boot_without_service(self):self.run_case(busy=True,running=False,boot=True)
  def test_invalid_port_does_not_fallback(self):self.run_case(port=9876,port_text='PORT="invalid"\n',invalid_port=True)
  def test_absent_port_uses_explicit_default(self):self.run_case(port_text='# PORT assente\n')
+ def test_spaces_around_equal_are_rejected(self):self.run_case(port_text='PORT = "9876"\n',invalid_port=True)
+ def test_unquoted_port(self):self.run_case(port=9876,port_text='PORT=9876 # commento\n')
+ def test_single_quoted_port(self):self.run_case(port=9876,port_text="PORT='9876' # commento\n")
+ def test_mismatched_quotes_are_rejected(self):self.run_case(port_text="PORT=\"9876'\n",invalid_port=True)
+ def test_attached_comment_is_rejected(self):self.run_case(port_text='PORT=9876#commento\n',invalid_port=True)
+ def test_duplicate_invalid_port_is_rejected(self):self.run_case(port_text='PORT="invalid"\nPORT="7090"\n',invalid_port=True)
 if __name__=='__main__':unittest.main()
