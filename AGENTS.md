@@ -4,7 +4,7 @@ Fork personale di `jbrodriguez/unbalance`. Branch applicativo: `main`; sviluppo 
 
 ## Funzionamento e comandi
 
-Plugin Unraid in Go con interfaccia React/Tailwind incorporata nel binario. `go test ./...`, `go vet ./...`; in `ui`: `npm ci --include=dev`, `npm run build`. Go richiesto da `go.mod`. Per il browser usare `~/.local/bin/ui-node`, mai servizi o dati reali per le prove.
+Plugin Unraid in Go con interfaccia React/Tailwind incorporata nel binario. Prima generare la UI: in `ui`, `npm ci --include=dev` e `npm run build`; poi dalla radice `go test ./...` e `go vet ./...`. Il frontend deve esistere prima dei controlli Go perché viene incorporato. Go richiesto da `go.mod`. Per il browser usare `~/.local/bin/ui-node`, mai servizi o dati reali per le prove.
 
 Fixture, toolchain, cache Go/npm, binari di prova e screenshot in `/temp/unbalance/<task>` dopo verifica mount e `system.LOCATION`, mai su disk2. Dati sintetici; pulizia al termine. Le dipendenze del frontend restano nel normale `node_modules` ignorato da Git.
 
@@ -25,3 +25,6 @@ GATHER: controllare i conflitti fra tutte le sorgenti e con la destinazione prim
 Xattr GATHER: proteggere file, cartelle e genitori impliciti trasferiti da -R, sia contro altre sorgenti sia contro la destinazione. Nessuna esclusione automatica per attributi volatili. Mtime/permessi/proprietario dei duplicati identici e delle cartelle padre implicite già presenti seguono l'ultima sorgente rsync, anche se i genitori contengono altri dati: documentare l'effetto sull'accesso. STOP nel preflight va registrato come interrotto, non come verifica fallita.
 
 PORT: assente usa 7090 anche in scripts/start; valori invalidi vanno fermati prima del killall. Installer rifiuta CR nella riga PORT e accetta export PORT=numero; non esegue la configurazione.
+
+La politica GATHER deve essere visibile per default prima del MOVE. Nel parser rsync, --no-OPTION è uno switch; se un token è il valore di un'altra opzione, preservarlo prima di interpretare eventuali switch.
+Installer PORT: formato Unraid, non Bash arbitrario; rifiutare dichiarazioni/unset esplicitamente invece di indovinare la porta. Mantenere i messaggi di rifiuto prima di qualunque effetto.
