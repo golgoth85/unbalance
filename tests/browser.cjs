@@ -21,7 +21,7 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
  try {
  for(const [name,width,height,mobile] of [['desktop',1440,900,false],['intermedio',1280,850,false],['mobile',390,844,true]]){
   const context=await browser.newContext({viewport:{width,height},isMobile:mobile,hasTouch:mobile});
-  const errors=[];const commands=[];
+  const errors=[];const commands=[];const measurements=[];
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.origin!==base){return route.abort();}
@@ -52,8 +52,9 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   const capture=async label=>{
    await page.waitForTimeout(180);
-   const geometry=await page.evaluate(()=>({w:innerWidth,scroll:document.documentElement.scrollWidth}));
-   assert(geometry.scroll<=geometry.w+1,`${name}/${label}: scroll ${JSON.stringify(geometry)}`);
+   const geometry=await page.evaluate(()=>({scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),inner:innerWidth,client:document.documentElement.clientWidth}));
+   measurements.push({label,viewportWidth:width,...geometry});
+   assert(geometry.scroll<=width+1,`${name}/${label}: scroll ${JSON.stringify(geometry)}`);
    await page.screenshot({path:output+'/'+name+'-'+label+'.png',fullPage:true});
   };
   await page.goto(base);await page.getByText('Source Disk',{exact:true}).waitFor();
@@ -98,9 +99,16 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   const native=fs.readFileSync('meta/plugin/unbalanced.page','utf8').split('---')[1]
     .replace(/<\?php[\s\S]*?\?>/g,'').replace(/<\?=[\s\S]*?\?>/g,'')
     .replace(/<script[\s\S]*?<\/script>/g,'').replace(/on(?:Click|Change)="[^"]*"/gi,'');
-  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px system-ui;margin:16px}input,select{padding:8px}</style>${native}`);
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px system-ui;margin:16px}input,select{padding:8px}</style>${native}`);
   await capture('unraid-template');
-  results.push({name,width,height,isMobile:mobile,screenshots:9,errors,commands:commands.map(c=>c.topic)});
+  // Negative control: an overflowing element must be detected even if the
+  // mobile layout viewport (innerWidth) expands to accommodate its content.
+  const overflow=await page.evaluate(w=>{
+    const probe=document.createElement('div');probe.style.width=(w+40)+'px';probe.style.height='1px';document.body.append(probe);
+    const size=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth);probe.remove();return size;
+  },width);
+  assert(overflow>width+1,'controllo negativo dello scroll non rilevato');
+  results.push({name,width,height,isMobile:mobile,screenshots:9,errors,measurements,commands:commands.map(c=>c.topic)});
   await context.close();
   assert.equal(errors.length,0,JSON.stringify(errors));
  }

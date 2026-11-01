@@ -11,7 +11,7 @@ export const Description: React.FunctionComponent = () => {
     I file già corrispondenti per dimensione e data vengono saltati; lo spazio riservato include i file temporanei e un margine per i metadati.
     COPY confronta dimensione e data: per conflitti di contenuto con dimensione/data uguali usare Validate checksum dalla cronologia.
     MOVE verifica contenuti e metadati prima della cancellazione. Senza -X, oppure con filtri o --chmod, eventuali differenze preservano la sorgente.
-    Copie della stessa cartella su altri dischi impediscono la cancellazione della sorgente: consolidarle prima di MOVE.
+    File con gli stessi percorsi relativi su altri dischi impediscono la cancellazione: consolidarli prima di MOVE. Cartelle vuote o contenuti diversi della stessa share non la impediscono.
     Scegli MOVE, COPY oppure dry-run. Con COPY gli originali restano sulla sorgente; lo spazio libero previsto sulla sorgente si riferisce a MOVE.
   </span>;
 };

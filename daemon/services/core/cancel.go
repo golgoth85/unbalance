@@ -48,3 +48,9 @@ func (c *Core) currentComparisonContext() context.Context {
 	}
 	return context.Background()
 }
+
+// Called synchronously during admission, never by a delayed worker.
+func (c *Core) armOperation() {
+	c.stopped.Store(false)
+	c.newPlanContext()
+}

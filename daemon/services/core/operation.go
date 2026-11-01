@@ -29,13 +29,12 @@ func (c *Core) runOperation(opName string) {
 	if err := validateRsyncArgs(operation.RsyncArgs); err != nil {
 		logger.Yellow("operation:rsync-args:blocked:%s", err)
 		c.publishOperationError("unable to start %s operation: %s", opName, err)
+		c.clearPlanContext()
 		c.setStatus(common.OpNeutral)
 		c.state.Operation = nil
 		return
 	}
 
-	c.stopped.Store(false)
-	c.newPlanContext()
 	operation.Started = time.Now()
 
 	if c.ctx.NotifyTransfer == 2 {
@@ -47,35 +46,60 @@ func (c *Core) runOperation(opName string) {
 	c.ctx.Hub.Pub(packet, "socket:broadcast")
 
 	commandsExecuted := make([]string, 0)
-
+	// Validate every stored command before the batch preflight reads any data.
 	for _, command := range operation.Commands {
 		paths, err := c.validateCommandForExecution(command)
 		if err != nil {
-			cmd := fmt.Sprintf(`rsync %s %s %s`, operation.RsyncStrArgs, strconv.Quote(command.Entry), strconv.Quote(command.Dst))
-			c.commandInterrupted(opName, operation, command, cmd, fmt.Errorf("unsafe command path: %w", err), 0, commandsExecuted)
+			command.Status = common.CmdVerificationFailed
+			c.commandInterrupted(opName, operation, command, "Percorso non autorizzato", err, 0, commandsExecuted)
 			return
 		}
-
 		command.Src = paths.SrcRoot
 		command.Dst = paths.DstRoot
 		command.Entry = paths.Entry
-
-		cmd := fmt.Sprintf(`rsync %s %s %s`, operation.RsyncStrArgs, strconv.Quote(paths.Entry), strconv.Quote(paths.DstRoot))
-		logger.Blue("command started: (src: %s) %s ", paths.SrcRoot, cmd)
-
-		operation.Line = cmd
-		packet := &domain.Packet{Topic: common.EventTransferProgress, Payload: operation}
-		c.ctx.Hub.Pub(packet, "socket:broadcast")
-
-		cmdTransferred, err := c.runCommand(operation, command)
+	}
+	currentLine := ""
+	failed, err := runTransferBatch(c.currentComparisonContext(), operation, func(command *domain.Command) error {
+		paths, err := c.validateCommandForExecution(command)
 		if err != nil {
-			c.commandInterrupted(opName, operation, command, cmd, err, cmdTransferred, commandsExecuted)
-			return
+			return fmt.Errorf("unsafe command path: %w", err)
 		}
-
+		command.Src = paths.SrcRoot
+		command.Dst = paths.DstRoot
+		command.Entry = paths.Entry
+		currentLine = fmt.Sprintf(`rsync %s %s %s`, operation.RsyncStrArgs, strconv.Quote(paths.Entry), strconv.Quote(paths.DstRoot))
+		logger.Blue("command started: (src: %s) %s", paths.SrcRoot, currentLine)
+		operation.Line = currentLine
+		c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventTransferProgress, Payload: operation}, "socket:broadcast")
+		transferred, err := c.runCommand(operation, command)
+		if err != nil {
+			command.Transferred = transferred
+			return err
+		}
 		c.commandCompleted(operation, command)
-
-		commandsExecuted = append(commandsExecuted, cmd)
+		commandsExecuted = append(commandsExecuted, currentLine)
+		return nil
+	})
+	if err != nil {
+		if failed == nil {
+			for _, command := range operation.Commands {
+				command.Status = common.CmdVerificationFailed
+				command.Reason = err.Error()
+			}
+			c.publishOperationError("%s", err)
+			operation.Finished = time.Now()
+			operation.Line = err.Error()
+			c.endOperation("Operazione interrotta", "Controllo preliminare fallito: sorgenti preservate", commandsExecuted, operation)
+		} else {
+			currentLine = fmt.Sprintf(`rsync %s %s %s`, operation.RsyncStrArgs, strconv.Quote(failed.Entry), strconv.Quote(failed.Dst))
+			failed.Status = common.CmdVerificationFailed
+			if c.currentComparisonContext().Err() != nil {
+				failed.Status = common.CmdStopped
+			}
+			failed.Reason = err.Error()
+			c.commandInterrupted(opName, operation, failed, currentLine, err, failed.Transferred, commandsExecuted)
+		}
+		return
 	}
 
 	c.operationCompleted(opName, operation, commandsExecuted)
@@ -281,7 +305,9 @@ func (c *Core) commandInterrupted(opName string, operation *domain.Operation, co
 		command.Reason = reason
 	}
 
-	command.Status = common.CmdStopped
+	if command.Status != common.CmdVerificationFailed {
+		command.Status = common.CmdStopped
+	}
 
 	logger.Yellow("%s", headline)
 	packet := &domain.Packet{Topic: common.EventOperationError, Payload: fmt.Sprintf("%s operation was interrupted. Check log (/var/log/unbalanced.log) for additional details.", opName)}
@@ -465,12 +491,11 @@ func (c *Core) removeSourceByID(operationID, commandID string) {
 	c.state.Operation = &operation
 	c.state.Unraid = c.refreshUnraid()
 
+	c.armOperation()
 	go c.performRemoveSource(&operation, command)
 }
 
 func (c *Core) performRemoveSource(operation *domain.Operation, cmd *domain.Command) {
-	c.stopped.Store(false)
-	c.newPlanContext()
 	operation.Line = fmt.Sprintf("Removing source %s", filepath.Join(cmd.Src, cmd.Entry))
 
 	packet := &domain.Packet{Topic: common.EventTransferStarted, Payload: operation}
@@ -539,6 +564,7 @@ func (c *Core) replay(operationID string) {
 		opName = "Move"
 	}
 
+	c.armOperation()
 	go c.runOperation(opName)
 }
 

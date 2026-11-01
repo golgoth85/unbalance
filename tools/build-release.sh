@@ -17,6 +17,6 @@ chmod -R a+rX "$out/package"
 tar --owner=0 --group=0 -czf "$out/unbalanced-$version.tgz" -C "$out/package" unbalanced
 md5=$(md5sum "$out/unbalanced-$version.tgz" | cut -d' ' -f1)
 sha256=$(sha256sum "$out/unbalanced-$version.tgz" | cut -d' ' -f1)
-sed -e "s/##version##/$version/g" -e "s/##md5##/$md5/g" -e "s/##sha256##/$sha256/g" -e 's/##changes##/- Pianificazione incrementale rsync e interfaccia adattabile a telefono e tablet./g' meta/template/unbalanced.plg > "$out/unbalanced.plg"
+sed -e "s/##version##/$version/g" -e "s/##md5##/$md5/g" -e "s/##sha256##/$sha256/g" -e 's/##changes##/- Protezione conflitti GATHER, share divise, filtri rsync, STOP e installer corretti./g' meta/template/unbalanced.plg > "$out/unbalanced.plg"
 (cd "$out" && sha256sum "unbalanced-$version.tgz" unbalanced.plg > SHA256SUMS)
 echo "Pacchetto pronto: $out"

@@ -211,6 +211,7 @@ func (c *Core) scatterMove(planID string) {
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterOperation(plan)
 
+	c.armOperation()
 	go c.runOperation("Move")
 }
 
@@ -230,6 +231,7 @@ func (c *Core) scatterCopy(planID string) {
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterOperation(plan)
 
+	c.armOperation()
 	go c.runOperation("Copy")
 }
 
@@ -304,6 +306,7 @@ func (c *Core) scatterValidate(operationID string) {
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterValidateOperation(operation)
 
+	c.armOperation()
 	go c.runOperation("Validate")
 }
 
