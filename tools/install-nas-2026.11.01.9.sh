@@ -110,11 +110,19 @@ assert_unchanged() {
 healthy() {
     curl -fsS --max-time 3 "$endpoint/api/health" 2>/dev/null | php -n -r '$s=json_decode(stream_get_contents(STDIN),true); exit(is_array($s)&&($s["version"]??null)===$argv[1]&&($s["status"]??null)===0?0:1);' "$version" 2>/dev/null
 }
+# La chiavetta /boot (FAT) non accetta link simbolici né proprietario: il link si salva come testo.
+save_entry() {
+    local target=$1 saved=$2
+    if [ -L "$target" ]; then readlink "$target" > "$saved.link"; else cp "$target" "$saved"; fi
+}
 restore_entry() {
-    local saved=$1 target=$2 present=$3
+    local saved=$1 target=$2 present=$3 dest
     [ ! -d "$target" ] || return 1
     if [ -e "$target" ] || [ -L "$target" ]; then unlink "$target" || return 1; fi
-    if [ "$present" -eq 1 ]; then cp -a "$saved" "$target" || return 1; fi
+    if [ "$present" -eq 1 ]; then
+        if [ -f "$saved.link" ]; then IFS= read -r dest < "$saved.link" && ln -s "$dest" "$target" || return 1
+        else cp "$saved" "$target" || return 1; fi
+    fi
 }
 rollback() {
     local current_hash current_version status restored=0
@@ -183,8 +191,8 @@ assert_idle || fail "Attività iniziata durante il download: installazione sospe
 assert_unchanged || fail "Stato precedente non più valido"
 backup=$(mktemp -d "$persistent/manual-install-$version-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")
 tar --exclude='*.env' --exclude='*.cfg' --exclude='secrets' --exclude='gateway-secrets' -czf "$backup/code.tgz" -C /usr/local/emhttp/plugins unbalanced
-if [ -e "$boot_manifest" ] || [ -L "$boot_manifest" ]; then cp -a "$boot_manifest" "$backup/boot-manifest.plg"; had_boot=1; fi
-if [ -e "$registration" ] || [ -L "$registration" ]; then cp -a "$registration" "$backup/registration"; had_registration=1; fi
+if [ -e "$boot_manifest" ] || [ -L "$boot_manifest" ]; then save_entry "$boot_manifest" "$backup/boot-manifest.plg"; had_boot=1; fi
+if [ -e "$registration" ] || [ -L "$registration" ]; then save_entry "$registration" "$backup/registration"; had_registration=1; fi
 if ! printf '%s  %s\n' "$bundle_sha" "$persistent/unbalanced-$version.tgz" | sha256sum -c - >/dev/null 2>&1; then
     cp "$stage/unbalanced-$version.tgz" "$persistent/.unbalanced-$version.download"
     mv "$persistent/.unbalanced-$version.download" "$persistent/unbalanced-$version.tgz"
