@@ -96,8 +96,13 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   await page.getByRole('button',{name:'Next',exact:true}).click();
   await page.getByRole('button',{name:'Next',exact:true}).click();
   const policy=page.getByText('Metadati del consolidamento',{exact:true});
-  if(mobile) await policy.tap(); else await policy.click();
-  await page.getByText('Anche le cartelle padre implicite già presenti',{exact:false}).waitFor();
+  const parentWarning=page.getByText('Anche le cartelle padre implicite già presenti',{exact:false});
+  assert(await policy.evaluate(node=>node.parentElement.open),'metadati GATHER devono essere aperti per default');
+  await parentWarning.waitFor({state:'visible'});
+  if(mobile) await policy.tap(); else {await policy.focus();await page.keyboard.press('Space');}
+  assert(!(await policy.evaluate(node=>node.parentElement.open)),'chiusura dettagli da touch/tastiera');
+  if(mobile) await policy.tap(); else await page.keyboard.press('Enter');
+  await parentWarning.waitFor({state:'visible'});
   await page.getByRole('button').filter({hasText:'disk3'}).click();
   await page.getByRole('button',{name:'MOVE',exact:true}).waitFor();
   await capture('gather-targets');

@@ -10,11 +10,11 @@ import tarfile
 import tempfile
 import unittest
 ROOT = Path(__file__).resolve().parents[1]
-VERSION='2026.11.01.6'
+VERSION='2026.11.01.7'
 
 class InstallerTests(unittest.TestCase):
- def run_case(self,busy=False,running=True,state='neutral',healthy=True,start_fails=False,port=7090,legacy_auth=False,boot=False,reinstall=False,legacy_folder=False,seed_backups=False,unrelated=False,port_text=None,invalid_port=False):
-  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/fourth-review-fixes') as tmp:
+ def run_case(self,busy=False,running=True,state='neutral',healthy=True,start_fails=False,port=7090,legacy_auth=False,boot=False,reinstall=False,legacy_folder=False,seed_backups=False,unrelated=False,port_text=None,invalid_port=False,expected_message=None):
+  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/fifth-review-fixes') as tmp:
    root=Path(tmp);emhttp=root/'emhttp';plugins=emhttp/'plugins';bootdir=root/'boot';code=plugins/'unbalanced';persistent=bootdir/'unbalanced'
    (code/'scripts').mkdir(parents=True);persistent.mkdir(parents=True)
    (persistent/'unbalanced.cfg').write_text(port_text if port_text is not None else f'PORT="{port}"\n')
@@ -54,6 +54,7 @@ class InstallerTests(unittest.TestCase):
    script=root/'install.sh';script.write_text(text)
    env=dict(os.environ,PATH=str(stubs)+':/usr/bin:/bin')
    result=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True)
+   if expected_message:self.assertIn(expected_message,result.stdout)
    self.assertEqual((persistent/'unbalanced.env').read_text(),'CONFIGURAZIONE SINTETICA DA PRESERVARE')
    self.assertEqual((persistent/'unbalanced.cfg').read_bytes(),(port_text if port_text is not None else f'PORT="{port}"\n').encode())
    self.assertFalse(list((root/'runtime').glob('update.*')))
@@ -102,6 +103,14 @@ class InstallerTests(unittest.TestCase):
  def test_duplicate_invalid_port_is_rejected(self):self.run_case(port_text='PORT="invalid"\nPORT="7090"\n',invalid_port=True)
  def test_crlf_port_is_rejected(self):self.run_case(port_text='PORT="9876"\r\n',invalid_port=True)
  def test_export_port(self):self.run_case(port=9876,port_text='export PORT=9876\n')
+ def test_zero_port_reports_reason(self):self.run_case(port_text='PORT=0\n',invalid_port=True,expected_message='PORT fuori intervallo')
+ def test_high_port_reports_reason(self):self.run_case(port_text='PORT=65536\n',invalid_port=True,expected_message='PORT fuori intervallo')
+ def test_duplicate_port_reports_reason(self):self.run_case(port_text='PORT=9876\nPORT=9877\n',invalid_port=True,expected_message='PORT duplicata')
+ def test_declare_port_refuses_without_fallback(self):self.run_case(port_text='declare PORT=9876\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
+ def test_readonly_port_refuses_without_fallback(self):self.run_case(port_text='readonly PORT=9876\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
+ def test_unset_port_refuses_without_guessing(self):self.run_case(port_text='PORT=9876\nunset PORT\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
+ def test_declare_flags_refuse_without_fallback(self):self.run_case(port_text='declare -x PORT=9876\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
+
 class StartPortTests(unittest.TestCase):
  def test_real_start_port_configuration(self):
   cases=[
@@ -115,9 +124,13 @@ class StartPortTests(unittest.TestCase):
    ('zero','PORT=0\n',None),
    ('range','PORT=65536\n',None),
    ('invalid','PORT=invalid\n',None),
+   ('duplicate','PORT=9876\nPORT=9877\n','9877'),
+   ('declare','declare PORT=9876\n','9876'),
+   ('readonly','readonly PORT=9876\n','9876'),
+   ('unset','PORT=9876\nunset PORT\n',None),
   ]
   for name,config,expected in cases:
-   with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='start-',dir='/temp/unbalance/fourth-review-fixes') as tmp:
+   with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='start-',dir='/temp/unbalance/fifth-review-fixes') as tmp:
     root=Path(tmp); stubs=root/'stubs';stubs.mkdir()
     cfg=root/'unbalanced.cfg';cfg.write_bytes(config.encode())
     vars=root/'unbalanced.env';vars.write_text('# ambiente sintetico\n')

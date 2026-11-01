@@ -220,9 +220,10 @@ func transferHasOverlap(ctx context.Context, src, other string) (bool, error) {
 func comparisonFlags(flags []string) []string {
 	out := []string{}
 	takesNext := false
-	// Unknown arity is preserved conservatively, never guessed as a switch.
+	// Switches from rsync --help plus compatibility aliases. --no-OPTION is
+	// always a switch; unknown positive arity preserves the following value.
 	switches := map[string]bool{}
-	for _, name := range strings.Fields("archive recursive relative no-relative implied-dirs no-implied-dirs links copy-links copy-unsafe-links safe-links munge-links copy-dirlinks keep-dirlinks hard-links perms no-perms executability acls xattrs owner group devices specials times omit-dir-times omit-link-times super fake-super sparse preallocate dry-run whole-file checksum one-file-system existing ignore-existing ignore-non-existing update append append-verify inplace partial delay-updates prune-empty-dirs compress compress-old compress-new ipv4 ipv6 numeric-ids human-readable no-human-readable itemize-changes stats progress verbose no-whole-file ignore-times ignore-errors blocking-io no-blocking-io size-only no-motd mkpath force 8-bit-output") {
+	for _, name := range strings.Fields("archive recursive relative no-relative implied-dirs no-implied-dirs links copy-links copy-unsafe-links safe-links munge-links copy-dirlinks keep-dirlinks hard-links perms no-perms executability acls xattrs owner group devices specials times omit-dir-times omit-link-times super fake-super sparse preallocate dry-run whole-file checksum one-file-system existing ignore-existing ignore-non-existing update append append-verify inplace partial delay-updates prune-empty-dirs compress compress-old compress-new ipv4 ipv6 numeric-ids human-readable no-human-readable itemize-changes stats progress verbose no-whole-file ignore-times ignore-errors blocking-io no-blocking-io size-only no-motd mkpath force 8-bit-output fuzzy protect-args secluded-args inc-recursive open-noatime fsync copy-devices write-devices ignore-missing-args old-args trust-sender list-only backup dirs old-dirs old-d atimes crtimes cvs-exclude from0") {
 		switches["--"+name] = true
 	}
 
@@ -239,7 +240,7 @@ func comparisonFlags(flags []string) []string {
 		}
 		if strings.HasPrefix(arg, "--") {
 			out = append(out, arg)
-			takesNext = !strings.Contains(arg, "=") && !switches[arg]
+			takesNext = !strings.Contains(arg, "=") && !strings.HasPrefix(arg, "--no-") && !switches[arg]
 			continue
 		}
 		if strings.HasPrefix(arg, "-") && arg != "-" {

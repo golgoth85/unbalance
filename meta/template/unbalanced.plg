@@ -47,6 +47,10 @@ bundle="$persistent/unbalanced-##version##.tgz"
     echo "Configurazione esistente richiesta"; exit 1;
 }
 # Read only PORT, never source/evaluate the configuration or print credentials.
+# These shell commands can set/unset PORT outside the supported assignment grammar.
+if grep -Eq '^[[:space:]]*(declare|typeset|local|readonly|unset)([[:space:]]+-[^[:space:]]+)*[[:space:]]+PORT([[:space:]=]|$)' "$persistent/unbalanced.cfg"; then
+    echo "Dichiarazione o unset PORT non supportati: installazione sospesa; usare PORT=numero"; exit 1
+fi
 port_lines=$(sed -nE '/^[[:space:]]*(export[[:space:]]+)?PORT[[:space:]]*=/p' "$persistent/unbalanced.cfg")
 if [ -z "$port_lines" ]; then
     echo "PORT assente: uso il valore predefinito 7090"
@@ -63,7 +67,7 @@ else
         -e 's/^[[:space:]]*(export[[:space:]]+)?PORT=([0-9]+)([[:space:]]+#.*|[[:space:]]*)$/\2/p')
 fi
 case "$port" in *[!0-9]*|'') echo "Porta non valida o duplicata: installazione sospesa"; exit 1;; esac
-[ "$port" -gt 0 ] && [ "$port" -le 65535 ] || exit 1
+[ "$port" -gt 0 ] && [ "$port" -le 65535 ] || { echo "PORT fuori intervallo 1-65535: installazione sospesa"; exit 1; }
 endpoint="http://127.0.0.1:$port"
 running=0
 assert_idle() {

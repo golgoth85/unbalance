@@ -431,6 +431,14 @@ func TestCommonSwitchesBeforeQuietProduceRealStatistics(t *testing.T) {
 	for _, flags := range [][]string{
 		{"--size-only", "-q"}, {"--no-motd", "-q"}, {"--mkpath", "-q"},
 		{"--force", "-q"}, {"--8-bit-output", "-q"}, {"-vy", "-q"}, {"-yq"}, {"-8q"},
+		{"--fuzzy", "-q"}, {"--protect-args", "-q"}, {"--no-inc-recursive", "-q"},
+		{"--open-noatime", "-q"}, {"--fsync", "-q"}, {"--copy-devices", "-q"},
+		{"--write-devices", "-q"}, {"--ignore-missing-args", "-q"}, {"--old-args", "-q"},
+		{"--trust-sender", "-q"}, {"--no-o", "-q"}, {"--no-g", "-q"},
+		{"--no-X", "-q"}, {"--no-xattrs", "-q"}, {"--no-W", "-q"},
+		{"--secluded-args", "-q"}, {"--inc-recursive", "-q"}, {"--backup", "-q"},
+		{"--dirs", "-q"},
+		{"--atimes", "-q"}, {"--cvs-exclude", "-q"}, {"--from0", "-q"},
 	} {
 		t.Run(strings.Join(flags, " "), func(t *testing.T) {
 			size, _, err := estimateTransfer(context.Background(), bin, &domain.Command{Src: src, Dst: dst, Entry: "share"}, flags)
@@ -438,5 +446,29 @@ func TestCommonSwitchesBeforeQuietProduceRealStatistics(t *testing.T) {
 				t.Fatal(size, err, comparisonFlags(flags))
 			}
 		})
+	}
+}
+
+func TestListOnlyAndNegativeSwitchesKeepArgumentBoundaries(t *testing.T) {
+	bin := testRsync(t)
+	src, dst := t.TempDir(), t.TempDir()
+	writeResumeFile(t, src, "share/file", "1234567")
+	// These options intentionally suppress file transfers with this fixture.
+	for _, option := range []string{"--list-only", "--old-dirs", "--old-d"} {
+		size, _, err := estimateTransfer(context.Background(), bin, &domain.Command{Src: src, Dst: dst, Entry: "share"}, []string{option, "-q"})
+		if err != nil || size != 0 {
+			t.Fatal("expected complete statistics without file transfers", option, size, err)
+		}
+	}
+	cases := []struct{ input, want []string }{
+		{[]string{"--no-future-switch", "-q"}, []string{"--no-future-switch"}},
+		{[]string{"--exclude", "--no-X", "-q"}, []string{"--exclude", "--no-X"}},
+		{[]string{"--future-value-option", "--no-o", "-q"}, []string{"--future-value-option", "--no-o"}},
+		{[]string{"--compare-dest", "-q", "--no-g", "-q"}, []string{"--compare-dest", "-q", "--no-g"}},
+	}
+	for _, tc := range cases {
+		if got := comparisonFlags(tc.input); !reflect.DeepEqual(got, tc.want) {
+			t.Fatal(tc.input, got, tc.want)
+		}
 	}
 }
