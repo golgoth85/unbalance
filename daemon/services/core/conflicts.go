@@ -53,11 +53,11 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 			}
 			current := checkedEntry{path, info}
 			if !info.IsDir() && parents[target] {
-				return fmt.Errorf("Conflitto GATHER file/cartella: %s; nessuna sorgente rimossa", command.Entry)
+				return fmt.Errorf("Conflitto GATHER file/cartella: %s; sorgente in conflitto preservata", command.Entry)
 			}
 			for parent := filepath.Dir(target); pathIsInside(paths.DstRoot, parent) && parent != paths.DstRoot; parent = filepath.Dir(parent) {
 				if earlier, ok := seen[parent]; ok && !earlier.info.IsDir() {
-					return fmt.Errorf("Conflitto GATHER file/cartella: %s; nessuna sorgente rimossa", command.Entry)
+					return fmt.Errorf("Conflitto GATHER file/cartella: %s; sorgente in conflitto preservata", command.Entry)
 				}
 				parents[parent] = true
 			}
@@ -67,7 +67,7 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 					return err
 				}
 				if !equal {
-					return fmt.Errorf("Conflitto GATHER tra sorgenti: %s; nessuna sorgente rimossa", command.Entry)
+					return fmt.Errorf("Conflitto GATHER tra sorgenti: %s; sorgente in conflitto preservata", command.Entry)
 				}
 			} else {
 				seen[target] = current
@@ -84,7 +84,7 @@ func validateGatherConflicts(ctx context.Context, commands []*domain.Command) er
 				return err
 			}
 			if !equal {
-				return fmt.Errorf("Conflitto GATHER con destinazione: %s; nessuna sorgente rimossa", command.Entry)
+				return fmt.Errorf("Conflitto GATHER con destinazione: %s; sorgente in conflitto preservata", command.Entry)
 			}
 			return nil
 		})
