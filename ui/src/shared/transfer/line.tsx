@@ -9,5 +9,5 @@ export const Line: React.FunctionComponent = () => {
     return null;
   }
 
-  return <span>{operation.line}</span>;
+  return <span className="break-all">{operation.line}</span>;
 };

@@ -5,7 +5,7 @@
 <!ENTITY author      "Juan B. Rodriguez">
 <!ENTITY version     "##version##">
 <!ENTITY launch      "Settings/&name;">
-<!ENTITY pluginURL   "https://github.com/jbrodriguez/unbalance/releases/latest/download/&name;.plg">
+<!ENTITY pluginURL   "https://github.com/golgoth85/unbalance/releases/latest/download/&name;.plg">
 <!ENTITY bundle      "&name;-&version;.tgz">
 <!ENTITY md5         "##md5##">
 ]>
@@ -29,39 +29,8 @@ The plugin frees up space from a disk array in unRAID systems.
 Get the unbalanced bundle.
 -->
 <FILE Name="/boot/config/plugins/&name;/&bundle;">
-<URL>"https://github.com/jbrodriguez/unbalance/releases/download/&version;/&bundle;"</URL>
+<URL>"https://github.com/golgoth85/unbalance/releases/download/&version;/&bundle;"</URL>
 <MD5>&md5;</MD5>
-</FILE>
-
-<!-- Install default plugin cfg  -->
-<FILE Name="/boot/config/plugins/unbalanced/unbalanced.cfg">
-<INLINE>
-<![CDATA[
-SERVICE="disable"
-PORT="7090"
-RUNAS="nobody"
-AUTH_ENABLED="false"
-AUTH_USERNAME="admin"
-]]>
-</INLINE>
-</FILE>
-
-<!-- Install default plugin env  -->
-<FILE Name="/boot/config/plugins/unbalanced/unbalanced.env">
-<INLINE>
-<![CDATA[
-DRY_RUN=true
-NOTIFY_PLAN=0
-NOTIFY_TRANSFER=0
-RESERVED_AMOUNT=1
-RESERVED_UNIT=Gb
-RSYNC_ARGS=-X
-VERBOSITY=0
-REFRESH_RATE=1000
-SPEED_WINDOW=90s
-AUTH_PASSWORD_HASH=
-]]>
-</INLINE>
 </FILE>
 
 <!--
@@ -69,28 +38,76 @@ Prepare for installation.
 -->
 <FILE Run="/bin/bash">
 <INLINE>
-running=$(pidof unbalanced | wc -w)
+<![CDATA[
+set -eu
+code=/usr/local/emhttp/plugins/unbalanced
+persistent=/boot/config/plugins/unbalanced
+bundle="$persistent/unbalanced-##version##.tgz"
 
-# Remove emhttp files so we can re-install.
-rm -rf /usr/local/emhttp/plugins/&name;/* 2>/dev/null
-
-# Remove old 'bundle' files.
-rm -f $(ls /boot/config/plugins/&name;/&name;*.tgz 2>/dev/null | grep -v '&version;.tgz')
-
-# Install the 'bundle'.
-tar -xf /boot/config/plugins/&name;/&bundle; -C /usr/local/emhttp/plugins
-
-# start the plugin if it was running previously
-if [ $running -eq 1 ]; then
-	/usr/local/emhttp/plugins/&name;/scripts/start
+# A plugin update must never interrupt a real transfer (including manual rsync).
+running=0
+assert_idle() {
+    if pgrep -x rsync >/dev/null; then
+        echo "Installazione sospesa: rsync attivo. Nessun servizio interrotto."
+        exit 1
+    fi
+    if pidof unbalanced >/dev/null; then
+        running=1
+        # State.Status is the first JSON field. Do not inspect secrets/config.
+        state=$(curl -fsS --max-time 10 http://127.0.0.1:7090/api/state) || {
+            echo "Impossibile verificare che Unbalanced sia inattivo: installazione sospesa."
+            exit 1
+        }
+        case "$state" in
+            '{"status":0,'*) ;;
+            *) echo "Unbalanced occupato o stato non verificabile: installazione sospesa."; exit 1 ;;
+        esac
+    fi
+}
+assert_idle
+[ -f "$persistent/unbalanced.cfg" ] && [ -f "$persistent/unbalanced.env" ] || {
+    echo "Configurazione esistente richiesta: questo pacchetto aggiorna il plugin installato."
+    exit 1
+}
+printf '%s  %s\n' '##sha256##' "$bundle" | sha256sum -c -
+# Keep a rollback of code. The plugin manager may already have saved the new manifest.
+backup="$persistent/rollback-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -m 700 "$backup"
+if [ -d "$code" ]; then
+    tar --exclude='*.env' --exclude='*.cfg' -czf "$backup/code.tgz" -C /usr/local/emhttp/plugins unbalanced
 fi
-
-echo "-----------------------------------------------------------"
-echo " unbalanced has been installed."
-echo " Copyright (c) &author;"
-echo " Version: &version;"
-echo "-----------------------------------------------------------"
-echo ""
+if [ -f /boot/config/plugins/unbalanced.plg ]; then
+    cp -p /boot/config/plugins/unbalanced.plg "$backup/manifest-at-install.plg"
+fi
+stage=$(mktemp -d /usr/local/emhttp/plugins/.unbalanced-new.XXXXXX)
+trap 'rm -rf "$stage"' EXIT
+tar -xzf "$bundle" -C "$stage"
+[ -x "$stage/unbalanced/unbalanced" ] && [ -f "$stage/unbalanced/VERSION" ]
+chmod -R a+rX "$stage/unbalanced"
+assert_idle
+old="$code.previous-##version##"
+[ ! -e "$old" ] || { echo "Directory precedente già presente: $old"; exit 1; }
+if [ "$running" -eq 1 ]; then "$code/scripts/stop"; fi
+if [ -d "$code" ]; then mv "$code" "$old"; fi
+mv "$stage/unbalanced" "$code"
+# Configurations and history remain in place and are never read/copied here.
+if [ "$running" -eq 1 ]; then
+    "$code/scripts/start"
+    healthy=0
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        sleep 1
+        if curl -fsS --max-time 3 http://127.0.0.1:7090/api/config | grep -q '##version##'; then healthy=1; break; fi
+    done
+    if [ "$healthy" -ne 1 ]; then
+        "$code/scripts/stop"
+        mv "$code" "$code.failed-##version##"
+        if [ -d "$old" ]; then mv "$old" "$code"; "$code/scripts/start"; fi
+        echo "Salute non confermata: ripristinato il codice precedente. Backup: $backup"
+        exit 1
+    fi
+fi
+echo "Unbalanced ##version## installato. Backup: $backup"
+]]>
 </INLINE>
 </FILE>
 
@@ -114,23 +131,5 @@ echo ""
 </INLINE>
 </FILE>
 
-<FILE Name="/tmp/unbalanced-chkconf" Run="/bin/bash">
-<INLINE>
-<![CDATA[
-#!/bin/sh
-# This will check each entry in the config so nothing is missing, and if missing, sets to default
-CFGFILE=/boot/config/plugins/unbalanced/unbalanced.cfg
-ENVFILE=/boot/config/plugins/unbalanced/unbalanced.env
-[ ! `cat "$CFGFILE" | grep SERVICE` ] && echo "SERVICE=\"disable\"" >> "$CFGFILE"
-[ ! `cat "$CFGFILE" | grep ^PORT` ] && echo "PORT=\"7090\"" >> "$CFGFILE"
-[ ! `cat "$CFGFILE" | grep RUNAS` ] && echo "RUNAS=\"nobody\"" >> "$CFGFILE"
-[ ! `cat "$CFGFILE" | grep AUTH_ENABLED` ] && echo "AUTH_ENABLED=\"false\"" >> "$CFGFILE"
-[ ! `cat "$CFGFILE" | grep AUTH_USERNAME` ] && echo "AUTH_USERNAME=\"admin\"" >> "$CFGFILE"
-[ ! `cat "$ENVFILE" | grep SPEED_WINDOW` ] && echo "SPEED_WINDOW=90s" >> "$ENVFILE"
-[ ! `cat "$ENVFILE" | grep AUTH_PASSWORD_HASH` ] && echo "AUTH_PASSWORD_HASH=" >> "$ENVFILE"
-rm /tmp/unbalanced-chkconf
-]]>
-</INLINE>
-</FILE>
 
 </PLUGIN>

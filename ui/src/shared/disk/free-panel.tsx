@@ -13,16 +13,16 @@ export const FreePanel: React.FunctionComponent<FreePanelProps> = ({
   currentFree,
   plannedFree,
 }) => {
-  const current = ((currentFree / size) * 100).toFixed(0);
-  const planned = ((plannedFree / size) * 100).toFixed(0);
+  const current = ((currentFree / Math.max(1, size)) * 100).toFixed(0);
+  const planned = ((plannedFree / Math.max(1, size)) * 100).toFixed(0);
 
   return (
     <>
       <span className="pt-2"></span>
 
-      <div className="flex flex-row item-center font-mono text-xs text-sky-700 dark:text-slate-500">
+      <div className="flex flex-row items-center font-mono text-xs text-sky-700 dark:text-slate-300">
         <span
-          className="leading-none bg-slate-700 text-slate-300 dark:bg-gray-900 dark:text-gray-600 py-0.5 px-1"
+          className="leading-none bg-slate-700 text-slate-300 dark:bg-gray-900 dark:text-gray-400 py-0.5 px-1"
           style={{ writingMode: 'vertical-lr', textOrientation: 'upright' }}
         >
           free

@@ -12,7 +12,6 @@ import (
 
 	"github.com/teris-io/shortid"
 
-	"unbalance/daemon/algorithm"
 	"unbalance/daemon/common"
 	"unbalance/daemon/domain"
 	"unbalance/daemon/lib"
@@ -55,6 +54,7 @@ func (c *Core) scatterPlanPrepare(setup domain.ScatterSetup) {
 
 	plan := &domain.Plan{
 		Started:       now,
+		RsyncArgs:     append([]string{}, c.ctx.RsyncArgs...),
 		ChosenFolders: setup.Selected,
 		VDisks:        make(map[string]*domain.VDisk),
 	}
@@ -94,7 +94,7 @@ func (c *Core) scatterPlanStart(ctx context.Context, plan *domain.Plan) {
 	srcDisk, dstDisks := getSourceAndDestinationDisks(c.state.Unraid.Disks, plan)
 
 	// get dest disks with more free space to the top
-	sort.Slice(dstDisks, func(i, j int) bool { return dstDisks[i].Free < dstDisks[j].Free })
+	sort.Slice(dstDisks, func(i, j int) bool { return dstDisks[i].Free > dstDisks[j].Free })
 
 	// some logging
 	logger.Blue("scatterPlan:source:(%+v)", srcDisk)
@@ -150,12 +150,25 @@ func (c *Core) scatterPlanStart(ctx context.Context, plan *domain.Plan) {
 		ceil := lib.Max(common.ReservedSpace, reserved)
 		logger.Blue("scatterPlan:ItemsLeft(%d):ReservedSpace(%d)", len(items), ceil)
 
-		packer := algorithm.NewKnapsack(disk, items, ceil, c.state.Unraid.BlockSize)
-		bin := packer.BestFit()
+		bin, err := resumeBin(ctx, disk, items, ceil, func(ctx context.Context, cmd *domain.Command) (uint64, uint64, error) {
+			return estimateTransfer(ctx, "/usr/bin/rsync", cmd, plan.RsyncArgs)
+		}, func(path string) {
+			c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventScatterPlanProgress, Payload: fmt.Sprintf("Confronto %s su %s", path, disk.Name)}, "socket:broadcast")
+		})
+		if err != nil {
+			cancelled := ctx.Err() != nil || c.stopped.Load()
+			c.planCancelled(common.EventScatterPlanCancelled)
+			if !cancelled {
+				c.publishOperationError("Pianificazione interrotta: %s", err)
+			}
+			return
+		}
 		if bin != nil && len(bin.Items) > 0 {
 			plan.VDisks[disk.Path].Bin = bin
-			plan.VDisks[disk.Path].PlannedFree -= bin.Size
-			plan.VDisks[srcDisk.Path].PlannedFree += bin.Size
+			plan.VDisks[disk.Path].PlannedFree -= bin.RequiredSpace
+			for _, item := range bin.Items {
+				plan.VDisks[srcDisk.Path].PlannedFree += item.Size
+			}
 
 			plan.BytesToTransfer += bin.Size
 
@@ -201,6 +214,10 @@ func (c *Core) scatterMove(planID string) {
 		return
 	}
 
+	if !slices.Equal(plan.RsyncArgs, c.ctx.RsyncArgs) {
+		c.publishOperationError("Le opzioni rsync sono cambiate: rigenerare il piano")
+		return
+	}
 	c.state.Status = common.OpScatterMove
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterOperation(plan)
@@ -216,6 +233,10 @@ func (c *Core) scatterCopy(planID string) {
 		return
 	}
 
+	if !slices.Equal(plan.RsyncArgs, c.ctx.RsyncArgs) {
+		c.publishOperationError("Le opzioni rsync sono cambiate: rigenerare il piano")
+		return
+	}
 	c.state.Status = common.OpScatterCopy
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createScatterOperation(plan)
@@ -262,13 +283,18 @@ func (c *Core) createScatterOperation(plan domain.Plan) *domain.Operation {
 				entry = item.Path
 			}
 
+			size := item.Size
+			if item.Estimated {
+				size = item.TransferSize
+			}
 			operation.Commands = append(operation.Commands, &domain.Command{
-				ID:     shortid.MustGenerate(),
-				Src:    item.Location,
-				Dst:    vdisk.Path + string(filepath.Separator),
-				Entry:  entry,
-				Size:   item.Size,
-				Status: common.CmdPending,
+				Estimated: item.Estimated,
+				ID:        shortid.MustGenerate(),
+				Src:       item.Location,
+				Dst:       vdisk.Path + string(filepath.Separator),
+				Entry:     entry,
+				Size:      size,
+				Status:    common.CmdPending,
 			})
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"unbalance/daemon/common"
@@ -33,6 +34,8 @@ func (c *Core) runOperation(opName string) {
 		return
 	}
 
+	c.stopped.Store(false)
+	c.newPlanContext()
 	operation.Started = time.Now()
 
 	if c.ctx.NotifyTransfer == 2 {
@@ -94,8 +97,35 @@ func (c *Core) runCommand(operation *domain.Operation, command *domain.Command) 
 		paths.DstRoot,
 	)
 
-	// make sure the command will run
-	c.stopped.Store(false)
+	if command.Estimated {
+		transfer, space, err := estimateTransfer(c.currentComparisonContext(), "/usr/bin/rsync", command, operation.RsyncArgs)
+		if err != nil {
+			return 0, err
+		}
+		var stat syscall.Statfs_t
+		if err := syscall.Statfs(paths.DstRoot, &stat); err != nil {
+			return 0, err
+		}
+		free := stat.Bavail * uint64(stat.Bsize)
+		reserve := common.ReservedSpace
+		for _, disk := range c.state.Unraid.Disks {
+			if disk.Path == paths.DstRoot {
+				reserve = lib.Max(reserve, c.getReservedAmount(disk.Size))
+			}
+		}
+		if space > 0 && (free <= reserve || space > free-reserve) {
+			return 0, fmt.Errorf("spazio insufficiente dopo il confronto aggiornato; sorgente preservata")
+		}
+		operation.BytesToTransfer = operation.BytesToTransfer - command.Size + transfer
+		command.Size = transfer
+	}
+
+	if err := c.currentComparisonContext().Err(); err != nil {
+		return 0, err
+	}
+	if c.stopped.Load() {
+		return 0, fmt.Errorf("operazione interrotta dall'utente")
+	}
 
 	// start rsync command
 	cmd, err := lib.StartRsync(paths.SrcRoot, args...)
@@ -309,6 +339,16 @@ func (c *Core) handleItemDeletion(operation *domain.Operation, command *domain.C
 			return
 		}
 
+		if command.Estimated {
+			if err := verifyResumeDestination(c.currentComparisonContext(), "/usr/bin/rsync", command); err != nil {
+				command.Status = common.CmdFlagged
+				command.Reason = err.Error()
+				operation.Line = err.Error()
+				c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventTransferProgress, Payload: operation}, "socket:broadcast")
+				return
+			}
+		}
+
 		operation.Line = fmt.Sprintf("Removing source %s", filepath.Join(command.Src, command.Entry))
 
 		packet := &domain.Packet{Topic: common.EventTransferProgress, Payload: operation}
@@ -319,6 +359,7 @@ func (c *Core) handleItemDeletion(operation *domain.Operation, command *domain.C
 			msg := fmt.Sprintf("Unable to remove source folder (%s): %s", filepath.Join(command.Src, command.Entry), err)
 			operation.Line = msg
 			command.Reason = msg
+			command.Status = common.CmdFlagged
 
 			packet := &domain.Packet{Topic: common.EventTransferProgress, Payload: operation}
 			c.ctx.Hub.Pub(packet, "socket:broadcast")
@@ -357,6 +398,7 @@ func (c *Core) endOperation(subject, headline string, commands []string, operati
 	ffinished := operation.Finished.Format(timeFormat)
 	elapsed := lib.Round(operation.Finished.Sub(operation.Started), time.Millisecond)
 
+	c.clearPlanContext()
 	c.state.Status = common.OpNeutral
 	c.state.Operation = nil
 	c.state.Unraid = c.refreshUnraid()
@@ -413,6 +455,8 @@ func (c *Core) removeSourceByID(operationID, commandID string) {
 }
 
 func (c *Core) performRemoveSource(operation *domain.Operation, cmd *domain.Command) {
+	c.stopped.Store(false)
+	c.newPlanContext()
 	operation.Line = fmt.Sprintf("Removing source %s", filepath.Join(cmd.Src, cmd.Entry))
 
 	packet := &domain.Packet{Topic: common.EventTransferStarted, Payload: operation}
@@ -431,11 +475,11 @@ func (c *Core) performRemoveSource(operation *domain.Operation, cmd *domain.Comm
 
 		c.handleItemDeletion(operation, command)
 
-		command.Status = common.CmdCompleted
-
-		text := "Removal completed"
-		operation.Line = text
-		logger.Blue("%s", text)
+		if command.Status == common.CmdSourceRemoval {
+			command.Status = common.CmdCompleted
+			operation.Line = "Removal completed"
+			logger.Blue("%s", operation.Line)
+		}
 
 		c.state.Unraid = c.refreshUnraid()
 		c.state.History.Items[operation.ID] = operation
@@ -456,6 +500,7 @@ func (c *Core) performRemoveSource(operation *domain.Operation, cmd *domain.Comm
 			logger.Yellow("Unable to write history: %s", err)
 		}
 
+		c.clearPlanContext()
 		c.state.Status = common.OpNeutral
 		c.state.Operation = nil
 

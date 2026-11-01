@@ -111,6 +111,9 @@ export interface History {
 }
 
 export interface Item {
+  estimated?: boolean;
+  transferSize?: number;
+  requiredSpace?: number;
   name: string;
   size: number;
   path: string;
@@ -119,6 +122,7 @@ export interface Item {
 }
 
 export interface Bin {
+  requiredSpace?: number;
   size: number;
   items: Item[];
   blocksUsed: number;

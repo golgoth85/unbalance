@@ -7,9 +7,10 @@ package domain
 
 // Bin -
 type Bin struct {
-	Size       uint64  `json:"size"`
-	Items      []*Item `json:"items"`
-	BlocksUsed uint64  `json:"blocksUsed"`
+	RequiredSpace uint64  `json:"requiredSpace,omitempty"`
+	Size          uint64  `json:"size"`
+	Items         []*Item `json:"items"`
+	BlocksUsed    uint64  `json:"blocksUsed"`
 }
 
 // Add -

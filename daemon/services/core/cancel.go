@@ -12,6 +12,7 @@ func (c *Core) newPlanContext() context.Context {
 
 	c.planMu.Lock()
 	c.planCancel = cancel
+	c.comparisonCtx = ctx
 	c.planMu.Unlock()
 
 	return ctx
@@ -33,6 +34,17 @@ func (c *Core) clearPlanContext() {
 	if c.planCancel != nil {
 		c.planCancel()
 		c.planCancel = nil
+		c.comparisonCtx = nil
 	}
 	c.planMu.Unlock()
+}
+
+// Shared with transfer preflight/checksum: STOP must cancel these long reads too.
+func (c *Core) currentComparisonContext() context.Context {
+	c.planMu.Lock()
+	defer c.planMu.Unlock()
+	if c.comparisonCtx != nil {
+		return c.comparisonCtx
+	}
+	return context.Background()
 }

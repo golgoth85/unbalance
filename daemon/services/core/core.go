@@ -70,8 +70,9 @@ type Core struct {
 
 	stopped atomic.Bool
 
-	planMu     sync.Mutex
-	planCancel context.CancelFunc
+	planMu        sync.Mutex
+	planCancel    context.CancelFunc
+	comparisonCtx context.Context
 }
 
 func Create(ctx *domain.Context) *Core {

@@ -10,7 +10,7 @@ export const Footer: React.FunctionComponent = () => {
   const version = useConfigVersion();
 
   return (
-    <section className="flex flex-row items-center justify-between bg-gray-800 dark:bg-gray-800 text-sky-700 dark:text-slate-300 p-2 my-4">
+    <section className="flex flex-wrap gap-3 items-center justify-between bg-gray-800 dark:bg-gray-800 text-sky-700 dark:text-slate-300 p-2 my-4">
       <div>
         <span className="text-slate-500 dark:text-slate-600 mr-1">
           Copyright &copy;
@@ -19,16 +19,16 @@ export const Footer: React.FunctionComponent = () => {
           href="https://jbrio.net/"
           target="_blank"
           title="jbrio.net"
-          className="text-lime-600"
+          className="text-lime-500 break-words"
         >
           Juan B. Rodriguez
         </a>
       </div>
-      <div className="text-lime-600">
+      <div className="text-lime-500 break-words">
         <span>unbalanced</span>
         {version !== '' && <span>&nbsp;{version}</span>}
       </div>
-      <div className="flex flex-row items-center">
+      <div className="flex flex-wrap gap-y-2 items-center">
         <a
           href="https://jbrio.net/unbalanced"
           title="Support Fund"

@@ -84,9 +84,9 @@ export const History: React.FunctionComponent = () => {
               >
                 <path
                   stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
                   d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6"
                 />
               </svg>
@@ -102,9 +102,9 @@ export const History: React.FunctionComponent = () => {
               >
                 <path
                   stroke="currentColor"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
                   d="M10 11V6m0 8h.01M19 10a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
                 />
               </svg>
@@ -129,11 +129,11 @@ export const History: React.FunctionComponent = () => {
           </div>
         </div>
       </Modal>
-      <div className="grid grid-cols-12 gap-1 h-full">
-        <div className="col-span-3 flex flex-col flex-1">
+      <div className="history-layout grid grid-cols-1 lg:grid-cols-12 gap-3 h-full">
+        <div className="history-list lg:col-span-3 min-w-0 lg:min-h-0 flex flex-col flex-1">
           <Operations current={selected} onSelected={onSelected} />
         </div>
-        <div className="col-span-9 flex flex-col flex-1">
+        <div className="history-detail lg:col-span-9 min-w-0 lg:min-h-0 flex flex-col flex-1">
           <Operation current={selected} first={first} onConfirm={onConfirm} />
         </div>
       </div>

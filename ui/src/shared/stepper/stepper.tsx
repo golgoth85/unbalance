@@ -26,9 +26,9 @@ export const Stepper: React.FunctionComponent<Props> = ({
 }) => {
   return (
     <div>
-      <ol className="items-center w-full space-y-4 sm:flex sm:space-x-8 sm:space-y-0 rtl:space-x-reverse">
+      <ol className="stepper grid grid-cols-3 gap-2 items-start w-full lg:flex lg:gap-6">
         <li
-          className={`flex items-center space-x-2.5 rtl:space-x-reverse ${
+          className={`flex items-center space-x-1.5 rtl:space-x-reverse ${
             styles[getStyles(currentStep === 1)].li
           }`}
         >
@@ -41,13 +41,13 @@ export const Stepper: React.FunctionComponent<Props> = ({
           </span>
           <span>
             <h3 className="font-medium leading-tight">{config[0].title}</h3>
-            <p className="text-sm">{config[0].subtitle}</p>
+            <p className="hidden sm:block text-sm">{config[0].subtitle}</p>
           </span>
         </li>
 
         {steps > 1 && config.length > 1 && (
           <li
-            className={`flex items-center space-x-2.5 rtl:space-x-reverse ${
+            className={`flex items-center space-x-1.5 rtl:space-x-reverse ${
               styles[getStyles(currentStep === 2)].li
             }`}
           >
@@ -60,14 +60,14 @@ export const Stepper: React.FunctionComponent<Props> = ({
             </span>
             <span>
               <h3 className="font-medium leading-tight">{config[1].title}</h3>
-              <p className="text-sm">{config[1].subtitle}</p>
+              <p className="hidden sm:block text-sm">{config[1].subtitle}</p>
             </span>
           </li>
         )}
 
         {steps > 2 && config.length > 2 && (
           <li
-            className={`flex items-center space-x-2.5 rtl:space-x-reverse ${
+            className={`flex items-center space-x-1.5 rtl:space-x-reverse ${
               styles[getStyles(currentStep === 3)].li
             }`}
           >
@@ -80,7 +80,7 @@ export const Stepper: React.FunctionComponent<Props> = ({
             </span>
             <span>
               <h3 className="font-medium leading-tight">{config[2].title}</h3>
-              <p className="text-sm">{config[2].subtitle}</p>
+              <p className="hidden sm:block text-sm">{config[2].subtitle}</p>
             </span>
           </li>
         )}

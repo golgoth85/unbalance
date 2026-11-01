@@ -14,9 +14,9 @@ export const Commands: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-neutral-100 dark:bg-gray-950">
+    <div className="command-list h-full min-h-0 min-w-0 flex flex-col bg-neutral-100 dark:bg-gray-950">
       <div className="flex flex-col px-2 pt-2">
-        <div className="grid grid-cols-12 gap-1 items-center text-lg text-slate-500 dark:text-gray-500 pb-2">
+        <div className="hidden lg:grid grid-cols-12 gap-1 items-center text-lg text-slate-500 dark:text-gray-500 pb-2">
           <div className="col-span-2 flex items-center">
             <Icon
               name="loading"
@@ -123,7 +123,7 @@ export const Commands: React.FunctionComponent = () => {
 
 //   return (
 //     // <div className="flex flex-1">
-//     <table className="h-full flex flex-col text-sm text-left text-gray-500 dark:text-gray-400">
+//     <table className="command-list h-full min-h-0 min-w-0 flex flex-col text-sm text-left text-gray-500 dark:text-gray-400">
 //       <thead className="text-xs text-slate-500 dark:text-gray-500 uppercase bg-neutral-100 dark:bg-gray-950">
 //         <tr>
 //           <th scope="col" className="p-4"></th>

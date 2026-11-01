@@ -153,11 +153,11 @@ export function ProtectedLayout() {
   }
 
   return (
-    <div className="container mx-auto h-screen flex flex-col">
+    <div className="app-shell container mx-auto min-h-dvh lg:h-dvh flex flex-col px-3 lg:px-0">
       <header>
         <Header />
       </header>
-      <main className="flex-1">
+      <main className="flex-1 min-w-0 lg:min-h-0">
         <Outlet />
       </main>
       <footer>

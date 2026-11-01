@@ -24,10 +24,10 @@ export const Panel: React.FunctionComponent<PanelProps> = ({
   }, [scrollToTop]);
 
   return (
-    <div className="h-full flex flex-col bg-neutral-100 dark:bg-gray-950">
+    <div className="h-full min-h-0 min-w-0 flex flex-col bg-neutral-100 dark:bg-gray-950">
       {title.length > 0 ? (
         <div className="flex flex-col pt-2 px-2">
-          <div className="flex flex-row gap-4 items-start justify-start pb-2">
+          <div className="flex flex-wrap gap-2 items-start justify-start pb-2">
             <h1 className="text-lg text-slate-500 dark:text-gray-500">
               {title}
             </h1>
@@ -36,11 +36,11 @@ export const Panel: React.FunctionComponent<PanelProps> = ({
           <hr className="border-slate-300 dark:border-gray-700" />
         </div>
       ) : null}
-      <div className="flex-auto">
+      <div className="flex-auto min-h-0 min-w-0">
         <AutoSizer disableWidth>
           {({ height }) => (
             <div
-              className="overflow-y-auto overflow-x-auto p-2"
+              className="panel-scroll overflow-auto p-2"
               style={{ height: `${height}px` }}
               ref={ref}
             >

@@ -43,11 +43,11 @@ export const Bin: React.FunctionComponent<BinProps> = ({ disk = '' }) => {
   return (
     <Panel title="Items (per disk)">
       {bin.items.map((item) => (
-        <div className="whitespace-nowrap">
+        <div key={`${item.location}/${item.path}`} className="break-words [overflow-wrap:anywhere]">
           <span className="text-gray-700 dark:text-gray-500 text-sm">
-            ({humanBytes(item.size)}){' '}
+            ({humanBytes(item.size)} sorgente{item.estimated ? `; ${humanBytes(item.transferSize ?? 0)} da trasferire` : ''}){' '}
           </span>
-          <span className="text-gray-500 dark:text-gray-700 text-sm">
+          <span className="text-gray-500 dark:text-gray-300 text-sm">
             {item.path}
           </span>
         </div>

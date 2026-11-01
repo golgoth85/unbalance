@@ -46,7 +46,7 @@ export const Navbar: React.FunctionComponent = () => {
     (route === '/gather/select' && Object.keys(selected).length === 0);
 
   return (
-    <div className="flex flex-row items-center justify-between mb-4">
+    <div className="flow-navbar flex flex-wrap gap-y-3 items-center justify-between mb-4">
       <div className="flex justify-start">
         <Button
           label="Prev"
@@ -63,21 +63,21 @@ export const Navbar: React.FunctionComponent = () => {
         />
       </div>
 
-      <div className="flex flex-row flex-1 items-center justify-between">
+      <div className="flow-controls flex flex-wrap gap-3 flex-1 min-w-0 items-center justify-between">
         <div className="flex flex-row items-center justify-start">
           <span className="mx-2" />
           <Stepper steps={3} currentStep={currentStep} config={config} />
         </div>
 
         {route === '/gather/plan' && busy && (
-          <div className="flex flex-row items-center justify-end">
+          <div className="flex flex-wrap gap-y-2 items-center justify-end">
             <Button label="STOP" variant="primary" onClick={onStopPlan} />
             <span className="mx-2" />
           </div>
         )}
 
         {route === '/gather/transfer/targets' && target !== '' && (
-          <div className="flex flex-row items-center justify-end">
+          <div className="flex flex-wrap gap-y-2 items-center justify-end">
             <Button label="MOVE" variant="primary" onClick={onMove} />
             <span className="mx-1">|</span>
 

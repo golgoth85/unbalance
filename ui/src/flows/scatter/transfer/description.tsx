@@ -1,19 +1,14 @@
 import React from 'react';
+import { useUnraidPlan } from '~/state/unraid';
+import { humanBytes } from '~/helpers/units';
 
 export const Description: React.FunctionComponent = () => {
-  return (
-    <>
-      <span>
-        Validate planned transfers, then choose to either{' '}
-        <span className="font-bold">MOVE</span> or{' '}
-        <span className="font-bold">COPY</span> the data using the buttons
-        above, you can also choose to <span className="font-bold">dry-run</span>{' '}
-        first (or not)
-        <br />
-        <span className="font-bold">*NOTE</span>: planned sizes are based on a
-        move scenario (copy scenario will be the same, except the source disk
-        will not change in free size)
-      </span>
-    </>
-  );
+  const plan = useUnraidPlan();
+  const sourceSize = Object.values(plan?.vdisks ?? {}).reduce((sum, disk) =>
+    sum + (disk.bin?.items ?? []).reduce((n, item) => n + item.size, 0), 0);
+  return <span>
+    Cartelle incluse: {humanBytes(sourceSize)}. Dati da trasferire: {humanBytes(plan?.bytesToTransfer ?? 0)} (stima rsync).
+    I file già corrispondenti per dimensione e data vengono saltati; lo spazio riservato include i file temporanei e un margine per i metadati.
+    Scegli MOVE, COPY oppure dry-run. Con COPY gli originali restano sulla sorgente; lo spazio libero previsto sulla sorgente si riferisce a MOVE.
+  </span>;
 };

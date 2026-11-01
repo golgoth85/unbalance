@@ -37,7 +37,7 @@ export const Dashboard: React.FunctionComponent = () => {
       : operation.remaining;
 
   return (
-    <div className="grid grid-cols-6 gap-4 ">
+    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 lg:gap-4">
       <Gauge value={completed} unit="%" label="Completed" />
 
       <Gauge value={speed} unit="MB/s" label="Speed" />
@@ -45,10 +45,10 @@ export const Dashboard: React.FunctionComponent = () => {
       <Gauge
         value={transferredValue}
         unit={transferredUnit}
-        label="Transferred"
+        label={operation.dryRun ? "Dati simulati" : "Dati previsti elaborati"}
       />
 
-      <Gauge value={totalValue} unit={totalUnit} label="Total" />
+      <Gauge value={totalValue} unit={totalUnit} label="Dati da trasferire (stima)" />
 
       <Gauge value={elapsed} label="Elapsed" />
 
