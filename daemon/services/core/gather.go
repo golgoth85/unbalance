@@ -182,6 +182,7 @@ func (c *Core) gatherMove(planID, target string) {
 	c.state.Unraid = c.refreshUnraid()
 	c.state.Operation = c.createGatherOperation(plan)
 
+	c.armOperation()
 	go c.runOperation("Move")
 }
 

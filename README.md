@@ -18,7 +18,7 @@ L'installer aggiorna un'installazione esistente sulla porta configurata, preserv
 configurazione e cronologia, verifica l'inattività, salva il codice precedente e
 ripristina il codice se non supera il controllo HTTP. Non installare mentre
 rsync o Unbalanced stanno lavorando. Non cambiano dati utente o schema.
-Le sorgenti Scatter non vengono cancellate se la stessa cartella esiste su altri dischi. Con filtri, --chmod o copia senza -X, differenze di metadati possono preservare le sorgenti: non sono autorizzazioni a rimuoverle manualmente. Lo stato di verifica fallita non è offerto a Remove source dalla vecchia UI dopo un rollback.
+Le sorgenti Scatter non vengono cancellate se gli stessi percorsi di file esistono su altri dischi; cartelle vuote e contenuti disgiunti delle share sono ammessi. Con filtri, --chmod o copia senza -X, differenze di metadati possono preservare le sorgenti: non sono autorizzazioni a rimuoverle manualmente. Lo stato di verifica fallita non è offerto a Remove source dalla vecchia UI dopo un rollback.
 Il controllo COPY ordinario usa dimensione/data; per confrontare il contenuto usare Validate checksum. Il rollback verso una versione precedente non aggiunge verifiche ai suoi comandi storici.
 Per il primo aggiornamento da una release legacy con autenticazione attiva occorre arrestare il plugin dal suo gestore dopo aver concluso le operazioni: senza endpoint di salute pubblico non è possibile accertarne l'inattività senza credenziali. Gli aggiornamenti successivi usano /api/health.
 I backup di codice del nuovo installer sono limitati agli ultimi due; conserva separatamente eventuali rollback da mantenere più a lungo. Le directory rollback-* delle vecchie release non vengono eliminate automaticamente. Reinstallazioni identiche e avvii del NAS non producono backup aggiuntivi.
@@ -324,3 +324,7 @@ then run `npm run dev` and point your browser to the endpoint returned by this c
 ## License
 
 MIT
+
+GATHER controlla l'intero gruppo prima di copiare: versioni di file in conflitto tra sorgenti o con la destinazione bloccano il gruppo preservando tutte le sorgenti. Il controllo della destinazione viene ripetuto prima di ciascuna copia. Sono confrontati contenuti, tipi e destinazioni dei link; le scritture concorrenti sui file interessati devono restare sospese.
+Lo stato 6 impedisce la rimozione dalla UI legacy, ma non modifica il backend di una vecchia versione ripristinata. Dopo un downgrade non inviare richieste di rimozione sorgenti via API su questi comandi: la verifica non è garantita dal backend vecchio.
+L'installer usa /usr/local/lib/unbalanced-runtime, fuori dalla radice web, per staging e copie legacy. Blocca rsync discendenti del servizio, non processi indipendenti o in altri container. Una PORT malformata o duplicata sospende l'installazione; spazi e commenti sono supportati.

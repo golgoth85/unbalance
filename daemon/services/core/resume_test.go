@@ -208,7 +208,7 @@ func TestResumeChoosesPartialDestinationBeforeFreeSpace(t *testing.T) {
 	if err := c.otherDestinationCopies(command); err != nil {
 		t.Fatal(err)
 	}
-	writeResumeFile(t, a, "share/series/partial.cbz", "truncated")
+	writeResumeFile(t, a, "share/series/00.cbz", "truncated")
 	if err := c.otherDestinationCopies(command); err == nil {
 		t.Fatal("MOVE would leave another partial copy")
 	}

@@ -159,23 +159,6 @@ func verifyResumeDestination(ctx context.Context, binary string, command *domain
 	return nil
 }
 
-// Only presentation flags are removed; selection/comparison semantics stay intact.
-func comparisonFlags(flags []string) []string {
-	out := []string{}
-	for _, f := range flags {
-		if f == "--quiet" || f == "--msgs2stderr" || f == "--no-msgs2stderr" {
-			continue
-		}
-		if strings.HasPrefix(f, "-") && !strings.HasPrefix(f, "--") {
-			f = "-" + strings.ReplaceAll(f[1:], "q", "")
-			if f == "-" {
-				continue
-			}
-		}
-		out = append(out, f)
-	}
-	return out
-}
 func copiesXattrs(flags []string) bool {
 	enabled := false
 	for _, f := range flags {
@@ -358,12 +341,12 @@ func (c *Core) otherDestinationCopies(command *domain.Command) error {
 		if err != nil {
 			return err
 		}
-		_, err = os.Lstat(path)
-		if err == nil {
-			return fmt.Errorf("Copia presente anche su %s: sorgente preservata; consolidare le copie prima di MOVE", disk.Name)
-		}
-		if !os.IsNotExist(err) {
+		overlap, err := transferHasOverlap(c.currentComparisonContext(), filepath.Join(command.Src, command.Entry), path)
+		if err != nil {
 			return err
+		}
+		if overlap {
+			return fmt.Errorf("File sovrapposti presenti anche su %s: sorgente preservata; consolidare le copie prima di MOVE", disk.Name)
 		}
 	}
 	return nil

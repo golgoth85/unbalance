@@ -12,7 +12,7 @@ const disks = ['disk3','disk4','disk5'].map((name,i)=>({id:i,name,path:'/mnt/'+n
 const item={name:long,path:'Libri/'+long,location:'/mnt/disk4',size:3355000000000,transferSize:646000000000,requiredSpace:647000000000,estimated:true,blocksUsed:0};
 const plan={id:'test-plan',started:now,ended:now,chosenFolders:['Libri'],ownerIssue:0,groupIssue:0,folderIssue:0,fileIssue:0,bytesToTransfer:item.transferSize,rsyncArgs:['-X'],vdisks:Object.fromEntries(disks.map(d=>[d.path,{path:d.path,currentFree:d.free,plannedFree:d.free-(d.name==='disk3'?item.requiredSpace:0),src:d.name==='disk4',dst:d.name==='disk3',bin:d.name==='disk3'?{size:item.transferSize,requiredSpace:item.requiredSpace,blocksUsed:0,items:[item]}:null}]))};
 const operation={id:'test-copy',opKind:3,started:now,finished:now,bytesToTransfer:646e9,bytesTransferred:0,dryRun:true,rsyncArgs:['-avPR','-X','--dry-run'],rsyncStrArgs:'-avPR -X --dry-run',commands:[{id:'cmd',src:'/mnt/disk4',dst:'/mnt/disk3',entry:item.path,size:0,transferred:0,status:0,reason:''}],completed:0,speed:0,remaining:'0s',deltaTransfer:0,line:'Confronto '+long};
-const failed={...operation,id:'failed-move',opKind:2,dryRun:false,commands:[{...operation.commands[0],status:6,estimated:true,reason:'Verifica fallita: sorgente preservata'}]};
+const failed={...operation,id:'failed-move',opKind:2,dryRun:false,commands:[{...operation.commands[0],status:6,estimated:true,reason:'Conflitto GATHER tra sorgenti: Film/X; sorgente in conflitto preservata'}]};
 const state={status:0,unraid:{numDisks:3,numProtected:3,synced:now,syncErrs:0,resync:0,resyncPos:0,state:'STARTED',size:48e12,free:3.6e12,disks,blockSize:4096},operation:null,history:{version:1,lastChecked:now,items:{[failed.id]:failed,[operation.id]:operation},order:[failed.id,operation.id]}};
 const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransfer:0,reservedAmount:1,reservedUnit:'Gb',rsyncArgs:['-X'],verbosity:0,refreshRate:1000,logLines:100,speedWindow:'90s',authEnabled:false,authUsername:'admin'};
 (async()=>{
@@ -21,7 +21,7 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
  try {
  for(const [name,width,height,mobile] of [['desktop',1440,900,false],['intermedio',1280,850,false],['mobile',390,844,true]]){
   const context=await browser.newContext({viewport:{width,height},isMobile:mobile,hasTouch:mobile});
-  const errors=[];const commands=[];
+  const errors=[];const commands=[];const measurements=[];
   await context.route('**/*',async route=>{
    const url=new URL(route.request().url());
    if(url.origin!==base){return route.abort();}
@@ -52,8 +52,9 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
   const capture=async label=>{
    await page.waitForTimeout(180);
-   const geometry=await page.evaluate(()=>({w:innerWidth,scroll:document.documentElement.scrollWidth}));
-   assert(geometry.scroll<=geometry.w+1,`${name}/${label}: scroll ${JSON.stringify(geometry)}`);
+   const geometry=await page.evaluate(()=>({scroll:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth),inner:innerWidth,client:document.documentElement.clientWidth}));
+   measurements.push({label,viewportWidth:width,...geometry});
+   assert(geometry.scroll<=width+1,`${name}/${label}: scroll ${JSON.stringify(geometry)}`);
    await page.screenshot({path:output+'/'+name+'-'+label+'.png',fullPage:true});
   };
   await page.goto(base);await page.getByText('Source Disk',{exact:true}).waitFor();
@@ -98,9 +99,16 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   const native=fs.readFileSync('meta/plugin/unbalanced.page','utf8').split('---')[1]
     .replace(/<\?php[\s\S]*?\?>/g,'').replace(/<\?=[\s\S]*?\?>/g,'')
     .replace(/<script[\s\S]*?<\/script>/g,'').replace(/on(?:Click|Change)="[^"]*"/gi,'');
-  await page.setContent(`<meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px system-ui;margin:16px}input,select{padding:8px}</style>${native}`);
+  await page.setContent(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px system-ui;margin:16px}input,select{padding:8px}</style>${native}`);
   await capture('unraid-template');
-  results.push({name,width,height,isMobile:mobile,screenshots:9,errors,commands:commands.map(c=>c.topic)});
+  // Negative control: an overflowing element must be detected even if the
+  // mobile layout viewport (innerWidth) expands to accommodate its content.
+  const overflow=await page.evaluate(w=>{
+    const probe=document.createElement('div');probe.style.width=(w+40)+'px';probe.style.height='1px';document.body.append(probe);
+    const size=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth);probe.remove();return size;
+  },width);
+  assert(overflow>width+1,'controllo negativo dello scroll non rilevato');
+  results.push({name,width,height,isMobile:mobile,screenshots:9,errors,measurements,commands:commands.map(c=>c.topic)});
   await context.close();
   assert.equal(errors.length,0,JSON.stringify(errors));
  }
