@@ -97,6 +97,7 @@ const config={version:'test-resume-mobile',dryRun:true,notifyPlan:0,notifyTransf
   await page.getByRole('button',{name:'Next',exact:true}).click();
   const policy=page.getByText('Metadati del consolidamento',{exact:true});
   if(mobile) await policy.tap(); else await policy.click();
+  await page.getByText('Anche le cartelle padre implicite già presenti',{exact:false}).waitFor();
   await page.getByRole('button').filter({hasText:'disk3'}).click();
   await page.getByRole('button',{name:'MOVE',exact:true}).waitFor();
   await capture('gather-targets');

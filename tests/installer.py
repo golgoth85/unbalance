@@ -3,16 +3,18 @@ import hashlib
 import os
 from pathlib import Path
 import shutil
+import shlex
+import time
 import subprocess
 import tarfile
 import tempfile
 import unittest
 ROOT = Path(__file__).resolve().parents[1]
-VERSION='2026.11.01.5'
+VERSION='2026.11.01.6'
 
 class InstallerTests(unittest.TestCase):
  def run_case(self,busy=False,running=True,state='neutral',healthy=True,start_fails=False,port=7090,legacy_auth=False,boot=False,reinstall=False,legacy_folder=False,seed_backups=False,unrelated=False,port_text=None,invalid_port=False):
-  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/third-review-fixes') as tmp:
+  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/fourth-review-fixes') as tmp:
    root=Path(tmp);emhttp=root/'emhttp';plugins=emhttp/'plugins';bootdir=root/'boot';code=plugins/'unbalanced';persistent=bootdir/'unbalanced'
    (code/'scripts').mkdir(parents=True);persistent.mkdir(parents=True)
    (persistent/'unbalanced.cfg').write_text(port_text if port_text is not None else f'PORT="{port}"\n')
@@ -53,7 +55,7 @@ class InstallerTests(unittest.TestCase):
    env=dict(os.environ,PATH=str(stubs)+':/usr/bin:/bin')
    result=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True)
    self.assertEqual((persistent/'unbalanced.env').read_text(),'CONFIGURAZIONE SINTETICA DA PRESERVARE')
-   self.assertEqual((persistent/'unbalanced.cfg').read_text(),port_text if port_text is not None else f'PORT="{port}"\n')
+   self.assertEqual((persistent/'unbalanced.cfg').read_bytes(),(port_text if port_text is not None else f'PORT="{port}"\n').encode())
    self.assertFalse(list((root/'runtime').glob('update.*')))
    self.assertEqual([p.name for p in plugins.iterdir()],['unbalanced'])
    backups=list(persistent.glob('backup-code-*.tgz'))
@@ -98,4 +100,47 @@ class InstallerTests(unittest.TestCase):
  def test_mismatched_quotes_are_rejected(self):self.run_case(port_text="PORT=\"9876'\n",invalid_port=True)
  def test_attached_comment_is_rejected(self):self.run_case(port_text='PORT=9876#commento\n',invalid_port=True)
  def test_duplicate_invalid_port_is_rejected(self):self.run_case(port_text='PORT="invalid"\nPORT="7090"\n',invalid_port=True)
+ def test_crlf_port_is_rejected(self):self.run_case(port_text='PORT="9876"\r\n',invalid_port=True)
+ def test_export_port(self):self.run_case(port=9876,port_text='export PORT=9876\n')
+class StartPortTests(unittest.TestCase):
+ def test_real_start_port_configuration(self):
+  cases=[
+   ('double','PORT="9876"\n','9876'),
+   ('single',"PORT='9876'\n",'9876'),
+   ('unquoted','PORT=9876 # commento\n','9876'),
+   ('export','export PORT=9876\n','9876'),
+   ('absent','# configurazione sintetica senza PORT\n','7090'),
+   ('crlf','PORT="9876"\r\n',None),
+   ('empty','PORT=""\n',None),
+   ('zero','PORT=0\n',None),
+   ('range','PORT=65536\n',None),
+   ('invalid','PORT=invalid\n',None),
+  ]
+  for name,config,expected in cases:
+   with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='start-',dir='/temp/unbalance/fourth-review-fixes') as tmp:
+    root=Path(tmp); stubs=root/'stubs';stubs.mkdir()
+    cfg=root/'unbalanced.cfg';cfg.write_bytes(config.encode())
+    vars=root/'unbalanced.env';vars.write_text('# ambiente sintetico\n')
+    args=root/'args';stopped=root/'stopped';prog=root/'unbalanced'
+    prog.write_text('#!/bin/bash\nprintf \'%s\\n\' "$@" > '+shlex.quote(str(args))+'\n');prog.chmod(0o755)
+    for command,text in {
+     'killall':'#!/bin/bash\ntouch '+shlex.quote(str(stopped))+'\n',
+     'sudo':'#!/bin/bash\n[ "$1" = "-H" ] && shift\nexec "$@"\n',
+    }.items():
+     stub=stubs/command;stub.write_text(text);stub.chmod(0o755)
+    text=(ROOT/'meta/plugin/scripts/start').read_text().replace('/boot/config/plugins/unbalanced/unbalanced.cfg',str(cfg)).replace('/boot/config/plugins/unbalanced/unbalanced.env',str(vars)).replace('/usr/local/emhttp/plugins/unbalanced/unbalanced',str(prog))
+    env=dict(os.environ,PATH=str(stubs)+':/usr/bin:/bin',PORT='5432')
+    result=subprocess.run(['bash'],input=text,env=env,capture_output=True,text=True)
+    if expected is None:
+     self.assertNotEqual(result.returncode,0)
+     self.assertFalse(stopped.exists(),'configurazione invalida ha fermato il servizio')
+     self.assertFalse(args.exists())
+    else:
+     self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+     for _ in range(100):
+      if args.exists():break
+      time.sleep(0.01)
+     self.assertTrue(stopped.exists())
+     self.assertEqual(args.read_text().splitlines(),['--port',expected])
+
 if __name__=='__main__':unittest.main()
