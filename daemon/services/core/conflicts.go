@@ -222,12 +222,12 @@ func comparisonFlags(flags []string) []string {
 	takesNext := false
 	// Unknown arity is preserved conservatively, never guessed as a switch.
 	switches := map[string]bool{}
-	for _, name := range strings.Fields("archive recursive relative no-relative implied-dirs no-implied-dirs links copy-links copy-unsafe-links safe-links munge-links copy-dirlinks keep-dirlinks hard-links perms no-perms executability acls xattrs owner group devices specials times omit-dir-times omit-link-times super fake-super sparse preallocate dry-run whole-file checksum one-file-system existing ignore-existing ignore-non-existing update append append-verify inplace partial delay-updates prune-empty-dirs compress compress-old compress-new ipv4 ipv6 numeric-ids human-readable no-human-readable itemize-changes stats progress verbose no-whole-file ignore-times ignore-errors blocking-io no-blocking-io") {
+	for _, name := range strings.Fields("archive recursive relative no-relative implied-dirs no-implied-dirs links copy-links copy-unsafe-links safe-links munge-links copy-dirlinks keep-dirlinks hard-links perms no-perms executability acls xattrs owner group devices specials times omit-dir-times omit-link-times super fake-super sparse preallocate dry-run whole-file checksum one-file-system existing ignore-existing ignore-non-existing update append append-verify inplace partial delay-updates prune-empty-dirs compress compress-old compress-new ipv4 ipv6 numeric-ids human-readable no-human-readable itemize-changes stats progress verbose no-whole-file ignore-times ignore-errors blocking-io no-blocking-io size-only no-motd mkpath force 8-bit-output") {
 		switches["--"+name] = true
 	}
 
 	const shortArguments = "fTBMe@"
-	const shortSwitches = "avPRrlptgoDHAisincWSumLkKOJEUNdbzxhICF046X"
+	const shortSwitches = "avPRrlptgoDHAisincWSumLkKOJEUNdbzxhICF046Xy8"
 	for _, arg := range flags {
 		if takesNext {
 			out = append(out, arg)

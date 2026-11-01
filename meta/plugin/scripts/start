@@ -4,7 +4,11 @@ cfg="/boot/config/plugins/unbalanced/unbalanced.cfg"
 vars="/boot/config/plugins/unbalanced/unbalanced.env"
 prog="/usr/local/emhttp/plugins/unbalanced/unbalanced"
 
-source "$cfg"
+# Match the installer default and reject malformed values before stopping anything.
+PORT=7090
+source "$cfg" || exit 1
+case "$PORT" in *[!0-9]*|'') echo "PORT non valida: avvio sospeso"; exit 1;; esac
+[ "$PORT" -gt 0 ] && [ "$PORT" -le 65535 ] || { echo "PORT fuori intervallo: avvio sospeso"; exit 1; }
 
 # stop it if it's running
 killall unbalanced > /dev/null 2>&1

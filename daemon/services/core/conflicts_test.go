@@ -423,3 +423,20 @@ func TestGroupedQuietAndUnknownValueAreNotCorrupted(t *testing.T) {
 		t.Fatal(size, err)
 	}
 }
+
+func TestCommonSwitchesBeforeQuietProduceRealStatistics(t *testing.T) {
+	bin := testRsync(t)
+	src, dst := t.TempDir(), t.TempDir()
+	writeResumeFile(t, src, "share/file", "1234567")
+	for _, flags := range [][]string{
+		{"--size-only", "-q"}, {"--no-motd", "-q"}, {"--mkpath", "-q"},
+		{"--force", "-q"}, {"--8-bit-output", "-q"}, {"-vy", "-q"}, {"-yq"}, {"-8q"},
+	} {
+		t.Run(strings.Join(flags, " "), func(t *testing.T) {
+			size, _, err := estimateTransfer(context.Background(), bin, &domain.Command{Src: src, Dst: dst, Entry: "share"}, flags)
+			if err != nil || size != 7 {
+				t.Fatal(size, err, comparisonFlags(flags))
+			}
+		})
+	}
+}
