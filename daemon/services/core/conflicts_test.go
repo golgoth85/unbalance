@@ -439,6 +439,7 @@ func TestCommonSwitchesBeforeQuietProduceRealStatistics(t *testing.T) {
 		{"--secluded-args", "-q"}, {"--inc-recursive", "-q"}, {"--backup", "-q"},
 		{"--dirs", "-q"},
 		{"--atimes", "-q"}, {"--cvs-exclude", "-q"}, {"--from0", "-q"}, {"--qsort", "-q"},
+		{"--i-r", "-q"}, {"--i-d", "-q"}, {"--old-compress", "-q"}, {"--new-compress", "-q"},
 	} {
 		t.Run(strings.Join(flags, " "), func(t *testing.T) {
 			size, _, err := estimateTransfer(context.Background(), bin, &domain.Command{Src: src, Dst: dst, Entry: "share"}, flags)
