@@ -10,11 +10,11 @@ import tarfile
 import tempfile
 import unittest
 ROOT = Path(__file__).resolve().parents[1]
-VERSION='2026.11.01.7'
+VERSION='2026.11.01.8'
 
 class InstallerTests(unittest.TestCase):
  def run_case(self,busy=False,running=True,state='neutral',healthy=True,start_fails=False,port=7090,legacy_auth=False,boot=False,reinstall=False,legacy_folder=False,seed_backups=False,unrelated=False,port_text=None,invalid_port=False,expected_message=None):
-  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/fifth-review-fixes') as tmp:
+  with tempfile.TemporaryDirectory(prefix='installer-',dir='/temp/unbalance/sixth-review-fixes') as tmp:
    root=Path(tmp);emhttp=root/'emhttp';plugins=emhttp/'plugins';bootdir=root/'boot';code=plugins/'unbalanced';persistent=bootdir/'unbalanced'
    (code/'scripts').mkdir(parents=True);persistent.mkdir(parents=True)
    (persistent/'unbalanced.cfg').write_text(port_text if port_text is not None else f'PORT="{port}"\n')
@@ -106,10 +106,20 @@ class InstallerTests(unittest.TestCase):
  def test_zero_port_reports_reason(self):self.run_case(port_text='PORT=0\n',invalid_port=True,expected_message='PORT fuori intervallo')
  def test_high_port_reports_reason(self):self.run_case(port_text='PORT=65536\n',invalid_port=True,expected_message='PORT fuori intervallo')
  def test_duplicate_port_reports_reason(self):self.run_case(port_text='PORT=9876\nPORT=9877\n',invalid_port=True,expected_message='PORT duplicata')
- def test_declare_port_refuses_without_fallback(self):self.run_case(port_text='declare PORT=9876\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
- def test_readonly_port_refuses_without_fallback(self):self.run_case(port_text='readonly PORT=9876\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
- def test_unset_port_refuses_without_guessing(self):self.run_case(port_text='PORT=9876\nunset PORT\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
- def test_declare_flags_refuse_without_fallback(self):self.run_case(port_text='declare -x PORT=9876\n',invalid_port=True,expected_message='Dichiarazione o unset PORT non supportati')
+ def test_declare_port_refuses_without_fallback(self):self.run_case(port_text='declare PORT=9876\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_readonly_port_refuses_without_fallback(self):self.run_case(port_text='readonly PORT=9876\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_unset_port_refuses_without_guessing(self):self.run_case(port_text='PORT=9876\nunset PORT\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_declare_flags_refuse_without_fallback(self):self.run_case(port_text='declare -x PORT=9876\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+
+ def test_let_port_is_rejected(self):self.run_case(port_text='PORT=9876\nlet PORT=1234\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_printf_port_is_rejected(self):self.run_case(port_text='PORT=9876\nprintf -v PORT 1234\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_eval_port_is_rejected(self):self.run_case(port_text='PORT=9876\neval PORT=1234\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_quoted_eval_port_is_rejected(self):self.run_case(port_text='PORT=9876\neval "PORT=1234"\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_port_append_is_rejected(self):self.run_case(port_text='PORT=9876\nPORT+=1\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_arithmetic_port_is_rejected(self):self.run_case(port_text='PORT=9876\n((PORT=1234))\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_export_without_assignment_is_rejected(self):self.run_case(port_text='PORT=9876\nexport -n PORT\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
+ def test_comments_and_other_literal_assignments_are_accepted(self):self.run_case(port=9876,port_text='# PORT: valore gestito da Unraid\nAUTH_USERNAME="PORT"\nOTHER=\'PORT=$literal\'\nPORT_OLD=1234 # PORT non usata\nexport OTHER_LITERAL=PORT\nPORT=9876 # PORT: commento\n')
+ def test_expansion_using_port_is_rejected(self):self.run_case(port_text='PORT=9876\nOTHER="$((PORT=1234))"\n',invalid_port=True,expected_message='PORT fuori grammatica supportata')
 
 class StartPortTests(unittest.TestCase):
  def test_real_start_port_configuration(self):
@@ -128,9 +138,13 @@ class StartPortTests(unittest.TestCase):
    ('declare','declare PORT=9876\n','9876'),
    ('readonly','readonly PORT=9876\n','9876'),
    ('unset','PORT=9876\nunset PORT\n',None),
+   ('let','PORT=9876\nlet PORT=1234\n','1234'),
+   ('printf','PORT=9876\nprintf -v PORT 1234\n','1234'),
+   ('eval','PORT=9876\neval PORT=1234\n','1234'),
+   ('append','PORT=9876\nPORT+=1\n',None),
   ]
   for name,config,expected in cases:
-   with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='start-',dir='/temp/unbalance/fifth-review-fixes') as tmp:
+   with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='start-',dir='/temp/unbalance/sixth-review-fixes') as tmp:
     root=Path(tmp); stubs=root/'stubs';stubs.mkdir()
     cfg=root/'unbalanced.cfg';cfg.write_bytes(config.encode())
     vars=root/'unbalanced.env';vars.write_text('# ambiente sintetico\n')
