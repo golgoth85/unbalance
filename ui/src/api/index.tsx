@@ -35,6 +35,7 @@ export class Api {
         refreshRate: 0,
         logLines: 100,
         speedWindow: '90s',
+        fullVerify: false,
         authEnabled: false,
         authUsername: 'admin',
       };
@@ -209,6 +210,17 @@ export class Api {
       await fetch(url, options);
     } catch (e) {
       console.log('notifyTransfer() error: ', e);
+    }
+  }
+
+  static async setFullVerify(value: boolean): Promise<void> {
+    const response = await fetch(`${Api.host}/config/fullVerify`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...Api.authHeaders() },
+      body: JSON.stringify(value),
+    });
+    if (!response.ok) {
+      throw new Error(`Impossibile salvare la verifica completa (${response.status})`);
     }
   }
 

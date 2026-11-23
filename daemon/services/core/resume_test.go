@@ -299,3 +299,101 @@ func TestCompleteFoldersFitBelowReserve(t *testing.T) {
 		t.Fatal(bins, err)
 	}
 }
+
+func TestVerifyDestinationQuickWithPreexistingChecksum(t *testing.T) {
+	bin := testRsync(t)
+	ctx := context.Background()
+	src := t.TempDir()
+	dst := t.TempDir()
+	name := "share/Serie ' ; $(echo NO)\nnuova"
+	command := &domain.Command{Src: src, Dst: dst, Entry: name}
+	writeResumeFile(t, src, name+"/new.mkv", "brand new")
+	writeResumeFile(t, src, name+"/same.mkv", "aaaa")
+	writeResumeFile(t, src, name+"/sub dir/stale\nfile.mkv", "good")
+
+	// Nothing on the destination yet: empty, non-nil snapshot.
+	snap, err := snapshotDestination(ctx, command)
+	if err != nil || snap == nil || len(snap) != 0 {
+		t.Fatalf("snapshot vuoto: %v %v", snap, err)
+	}
+
+	// Pre-existing copies: one identical, one with same size and mtime but
+	// different content (hidden from quick-check), one only on destination.
+	writeResumeFile(t, dst, name+"/same.mkv", "aaaa")
+	writeResumeFile(t, dst, name+"/sub dir/stale\nfile.mkv", "evil")
+	writeResumeFile(t, dst, name+"/only-dst.nfo", "x")
+	snap, err = snapshotDestination(ctx, command)
+	if err != nil || len(snap) != 3 {
+		t.Fatalf("snapshot: %q %v", snap, err)
+	}
+	cmd := exec.Command(bin, "-aRX", "--", name, dst)
+	cmd.Dir = src
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s: %v", output, err)
+	}
+	if err := verifyDestination(ctx, bin, command, snap, false); err == nil {
+		t.Fatal("checksum dei file preesistenti non ha rilevato il conflitto")
+	}
+	if err := verifyDestination(ctx, bin, command, nil, false); err == nil {
+		t.Fatal("snapshot assente deve usare il checksum completo")
+	}
+	if err := verifyDestination(ctx, bin, command, []string{}, true); err == nil {
+		t.Fatal("verifica completa non ha rilevato il conflitto")
+	}
+	// Without the stale file in the snapshot the quick check alone passes:
+	// that is the documented trust in rsync's transfer checksum.
+	if err := verifyDestination(ctx, bin, command, []string{filepath.Join(name, "same.mkv")}, false); err != nil {
+		t.Fatalf("controllo rapido: %v", err)
+	}
+
+	// Fix the stale copy: quick + targeted checksum pass, destination-only
+	// files are ignored, full check agrees.
+	writeResumeFile(t, dst, name+"/sub dir/stale\nfile.mkv", "good")
+	if err := verifyDestination(ctx, bin, command, snap, false); err != nil {
+		t.Fatalf("verifica rapida dopo correzione: %v", err)
+	}
+	if err := verifyResumeDestination(ctx, bin, command); err != nil {
+		t.Fatalf("verifica completa dopo correzione: %v", err)
+	}
+
+	// Missing file (e.g. excluded by a user filter) and later source change are
+	// caught by the quick check even with an empty snapshot.
+	if err := os.Remove(filepath.Join(dst, name, "new.mkv")); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyDestination(ctx, bin, command, []string{}, false); err == nil {
+		t.Fatal("file mancante non rilevato")
+	}
+	writeResumeFile(t, dst, name+"/new.mkv", "brand new")
+	writeResumeFile(t, src, name+"/new.mkv", "brand new, edited")
+	if err := verifyDestination(ctx, bin, command, []string{}, false); err == nil {
+		t.Fatal("sorgente modificata non rilevata")
+	}
+
+	// STOP cancels both the snapshot walk and the verification.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := snapshotDestination(cancelled, command); err == nil {
+		t.Fatal("snapshot ha ignorato la cancellazione")
+	}
+	if err := verifyDestination(cancelled, bin, command, snap, false); err == nil {
+		t.Fatal("verifica ha ignorato la cancellazione")
+	}
+}
+
+func TestSnapshotDestinationRejectsUnsafePaths(t *testing.T) {
+	dst := t.TempDir()
+	outside := t.TempDir()
+	writeResumeFile(t, outside, "secret/file", "x")
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(dst, "share")); err != nil {
+		t.Fatal(err)
+	}
+	c := &domain.Command{Src: t.TempDir(), Dst: dst, Entry: "share"}
+	if _, err := snapshotDestination(context.Background(), c); err == nil {
+		t.Fatal("symlink fuori root consentito")
+	}
+	c.Entry = "../escape"
+	if _, err := snapshotDestination(context.Background(), c); err == nil {
+		t.Fatal("traversal consentito")
+	}
+}

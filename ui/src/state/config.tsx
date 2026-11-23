@@ -16,6 +16,7 @@ interface ConfigStore {
   refreshRate: number;
   logLines: number;
   speedWindow: string;
+  fullVerify: boolean;
   actions: {
     getConfig: () => Promise<void>;
     toggleDryRun: () => Promise<void>;
@@ -27,6 +28,7 @@ interface ConfigStore {
     setVerbosity: (value: number) => Promise<void>;
     setRefreshRate: (value: number) => Promise<void>;
     setLogLines: (value: number) => Promise<void>;
+    setFullVerify: (value: boolean) => Promise<void>;
   };
 }
 
@@ -43,6 +45,7 @@ export const useConfigStore = create<ConfigStore>()(
     refreshRate: 1000,
     logLines: 100,
     speedWindow: '90s',
+    fullVerify: false,
     actions: {
       getConfig: async () => {
         const config = await Api.getConfig();
@@ -59,6 +62,7 @@ export const useConfigStore = create<ConfigStore>()(
           state.refreshRate = config.refreshRate;
           state.logLines = config.logLines;
           state.speedWindow = config.speedWindow;
+          state.fullVerify = config.fullVerify === true;
         });
       },
       toggleDryRun: async () => {
@@ -116,6 +120,12 @@ export const useConfigStore = create<ConfigStore>()(
         });
         await Api.setLogLines(value);
       },
+      setFullVerify: async (value: boolean) => {
+        await Api.setFullVerify(value);
+        set((state) => {
+          state.fullVerify = value;
+        });
+      },
     },
   })),
 );
@@ -143,3 +153,5 @@ export const useConfigRefreshRate = () =>
   useConfigStore((state) => state.refreshRate);
 export const useConfigLogLines = () =>
   useConfigStore((state) => state.logLines);
+export const useConfigFullVerify = () =>
+  useConfigStore((state) => state.fullVerify);

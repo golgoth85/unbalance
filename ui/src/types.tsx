@@ -24,6 +24,7 @@ export interface Config {
   refreshRate: number;
   logLines: number;
   speedWindow: string;
+  fullVerify: boolean;
   authEnabled: boolean;
   authUsername: string;
 }

@@ -290,6 +290,14 @@ func (c *Core) SetNotifyTransfer(value int) *domain.Config {
 	return &c.ctx.Config
 }
 
+func (c *Core) SetFullVerify(value bool) *domain.Config {
+	c.ctx.Config.FullVerify = value
+	if err := c.saveSettings(); err != nil {
+		logger.Yellow("setFullVerify: unable to save settings: %s", err)
+	}
+	return &c.ctx.Config
+}
+
 func (c *Core) SetReservedSpace(amount uint64, unit string) *domain.Config {
 	c.ctx.Config.ReservedAmount = amount
 	c.ctx.Config.ReservedUnit = unit

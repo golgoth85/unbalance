@@ -155,6 +155,21 @@ func (c *Core) runCommand(operation *domain.Operation, command *domain.Command) 
 		return 0, fmt.Errorf("operazione interrotta dall'utente")
 	}
 
+	// Files already on the destination may be skipped by rsync's quick-check
+	// without a content comparison: remember them for the pre-deletion check.
+	command.PreexistingDst = nil
+	if command.Estimated || command.VerifySource {
+		preexisting, err := snapshotDestination(c.currentComparisonContext(), command)
+		if err != nil {
+			if ctxErr := c.currentComparisonContext().Err(); ctxErr != nil {
+				return 0, ctxErr
+			}
+			logger.Yellow("command:snapshot:error(%s): full checksum verification will be used", err)
+		} else {
+			command.PreexistingDst = preexisting
+		}
+	}
+
 	// start rsync command
 	cmd, err := lib.StartRsync(paths.SrcRoot, args...)
 	if err != nil {
@@ -380,7 +395,20 @@ func (c *Core) handleItemDeletion(operation *domain.Operation, command *domain.C
 				c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventTransferProgress, Payload: operation}, "socket:broadcast")
 				return
 			}
-			if err := verifyResumeDestination(c.currentComparisonContext(), "/usr/bin/rsync", command); err != nil {
+			preexisting := command.PreexistingDst
+			command.PreexistingDst = nil
+			full := c.ctx.Config.FullVerify || preexisting == nil
+			target := filepath.Join(command.Dst, command.Entry)
+			if full {
+				operation.Line = fmt.Sprintf("Verifica checksum completa della destinazione in corso (rilegge sorgente e copia): %s", target)
+			} else if len(preexisting) > 0 {
+				operation.Line = fmt.Sprintf("Verifica destinazione in corso: controllo rapido e checksum di %d file già presenti: %s", len(preexisting), target)
+			} else {
+				operation.Line = fmt.Sprintf("Verifica rapida della destinazione in corso: %s", target)
+			}
+			logger.Blue("%s", operation.Line)
+			c.ctx.Hub.Pub(&domain.Packet{Topic: common.EventTransferProgress, Payload: operation}, "socket:broadcast")
+			if err := verifyDestination(c.currentComparisonContext(), "/usr/bin/rsync", command, preexisting, full); err != nil {
 				command.Status = common.CmdVerificationFailed
 				command.Reason = err.Error()
 				operation.Line = err.Error()
@@ -511,6 +539,8 @@ func (c *Core) performRemoveSource(operation *domain.Operation, cmd *domain.Comm
 		// status is cmdFlagged currently, let's change this to cmdSourceRemoval, so that handleItemDeletion works
 		// correctly and the UI can display a proper feedback for this command
 		command.Status = common.CmdSourceRemoval
+		// The pre-transfer snapshot belongs to the original run only.
+		command.PreexistingDst = nil
 
 		c.handleItemDeletion(operation, command)
 

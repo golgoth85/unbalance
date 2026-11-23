@@ -12,4 +12,8 @@ type Command struct {
 	Transferred  uint64 `json:"transferred"`
 	Status       int    `json:"status"`
 	Reason       string `json:"reason"`
+
+	// Regular files found on the destination before this run's transfer.
+	// Runtime only: nil means unknown and forces the full checksum check.
+	PreexistingDst []string `json:"-"`
 }

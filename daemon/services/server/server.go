@@ -116,6 +116,7 @@ func (s *Server) Start() error {
 	protected.PUT("/config/dryRun", s.toggleDryRun, s.requireCSRF)
 	protected.PUT("/config/notifyPlan", s.setNotifyPlan, s.requireCSRF)
 	protected.PUT("/config/notifyTransfer", s.setNotifyTransfer, s.requireCSRF)
+	protected.PUT("/config/fullVerify", s.setFullVerify, s.requireCSRF)
 	protected.PUT("/config/reservedSpace", s.setReservedSpace, s.requireCSRF)
 	protected.PUT("/config/rsyncArgs", s.setRsyncArgs, s.requireCSRF)
 	protected.PUT("/config/verbosity", s.setVerbosity, s.requireCSRF)
@@ -410,6 +411,15 @@ func (s *Server) setNotifyTransfer(c echo.Context) error {
 	}
 
 	return c.JSON(200, s.core.SetNotifyTransfer(value))
+}
+
+func (s *Server) setFullVerify(c echo.Context) error {
+	var value bool
+	if err := c.Bind(&value); err != nil {
+		return err
+	}
+
+	return c.JSON(200, s.core.SetFullVerify(value))
 }
 
 func (s *Server) setReservedSpace(c echo.Context) error {

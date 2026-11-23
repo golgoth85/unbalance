@@ -134,7 +134,64 @@ type transferEstimator func(context.Context, *domain.Command) (uint64, uint64, e
 
 // This check deliberately ignores user filters and skip flags. A successful
 // filtered copy is not proof that it is safe to delete the whole source tree.
+// It is the full checksum comparison, used whenever no pre-transfer snapshot
+// of the destination is available (history removal, legacy commands) or when
+// the user enabled the full verification setting.
 func verifyResumeDestination(ctx context.Context, binary string, command *domain.Command) error {
+	return verifyDestination(ctx, binary, command, nil, true)
+}
+
+// snapshotDestination lists the regular files that already exist on the
+// destination before the transfer, as paths relative to the destination root.
+// rsync's quick-check may skip them without reading their content, so they are
+// the only files not covered by rsync's own whole-file checksum on transfer.
+func snapshotDestination(ctx context.Context, command *domain.Command) ([]string, error) {
+	paths, err := safeCommandPaths(command)
+	if err != nil {
+		return nil, err
+	}
+	if err = validateCreatablePathBoundary(paths.DstRoot, paths.DstPath); err != nil {
+		return nil, err
+	}
+	files := make([]string, 0)
+	if _, err = os.Lstat(paths.DstPath); os.IsNotExist(err) {
+		return files, nil
+	} else if err != nil {
+		return nil, err
+	}
+	err = filepath.WalkDir(paths.DstPath, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(paths.DstRoot, path)
+		if err != nil {
+			return err
+		}
+		if strings.ContainsRune(rel, 0) {
+			return fmt.Errorf("nome file non rappresentabile: %q", rel)
+		}
+		files = append(files, rel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// verifyDestination checks the destination before a MOVE/GATHER deletes the
+// source. With full=true or without a snapshot every file is compared by
+// checksum. Otherwise a quick comparison (presence, size, mtime, metadata,
+// xattrs) covers the whole tree, and the checksum comparison is limited to the
+// files that existed on the destination before the transfer: files rsync wrote
+// in this run were already verified by rsync's whole-file transfer checksum.
+func verifyDestination(ctx context.Context, binary string, command *domain.Command, preexisting []string, full bool) error {
 	paths, err := safeCommandPaths(command)
 	if err != nil {
 		return err
@@ -145,12 +202,35 @@ func verifyResumeDestination(ctx context.Context, binary string, command *domain
 	if err = validateCreatablePathBoundary(paths.DstRoot, paths.DstPath); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, binary, "-aRXnc", "--itemize-changes", "--out-format=%i", "--", paths.Entry, paths.DstRoot)
-	cmd.Dir = paths.SrcRoot
+	if full || preexisting == nil {
+		return runVerification(ctx, binary, paths.SrcRoot, nil, "-aRXnc", "--itemize-changes", "--out-format=%i", "--", paths.Entry, paths.DstRoot)
+	}
+	if err = runVerification(ctx, binary, paths.SrcRoot, nil, "-aRXn", "--itemize-changes", "--out-format=%i", "--", paths.Entry, paths.DstRoot); err != nil {
+		return err
+	}
+	if len(preexisting) == 0 {
+		return nil
+	}
+	var list bytes.Buffer
+	for _, file := range preexisting {
+		list.WriteString(file)
+		list.WriteByte(0)
+	}
+	// --files-from disables the recursion implied by -a: only listed files are
+	// read. Files present only on the destination are irrelevant to deletion.
+	return runVerification(ctx, binary, paths.SrcRoot, &list, "-aRXnc", "--itemize-changes", "--out-format=%i", "--from0", "--files-from=-", "--ignore-missing-args", "--", ".", paths.DstRoot)
+}
+
+func runVerification(ctx context.Context, binary, dir string, stdin *bytes.Buffer, args ...string) error {
+	cmd := exec.CommandContext(ctx, binary, args...)
+	cmd.Dir = dir
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
 	var stdout limitedOutput
 	cmd.Stdout = &stdout
 	cmd.Stderr = &limitedOutput{}
-	if err = cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("destination verification failed: %w", err)
 	}
 	if strings.TrimSpace(stdout.String()) != "" {
